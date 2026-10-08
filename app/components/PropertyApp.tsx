@@ -761,11 +761,14 @@ export default function PropertyApp() {
               Inmobiliaria
             </p>
             <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight sm:text-5xl">
-              Elegi una zona de Catamarca y mira que propiedades hay cerca.
+              Propiedades en Venta Catamarca.
             </h1>
+            <p className="mt-3 text-sm font-medium uppercase tracking-[0.16em] text-[#6e7d5b]">
+              Publica la tuya
+            </p>
             <p className="mt-4 max-w-2xl text-base leading-7 text-black/60">
-              El comprador explora la provincia desde el mapa, compara fotos y
-              abre cada propiedad para ver precio, ubicacion y detalle.
+              Explora la provincia desde el mapa, compara fotos y abre cada
+              propiedad para ver precio, ubicacion y detalle.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
