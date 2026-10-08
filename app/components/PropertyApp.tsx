@@ -40,6 +40,7 @@ const emptyForm: FormState = {
 const maxPhotoDimension = 1600;
 const maxCompressedPhotoBytes = 1_600_000;
 const imageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+const imageExtensions = [".jpg", ".jpeg", ".png", ".webp"];
 
 function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -80,9 +81,20 @@ function canvasToBlob(
 }
 
 async function compressPhoto(file: File) {
-  if (!imageMimeTypes.includes(file.type)) {
+  const normalizedName = file.name.toLowerCase();
+  const hasSupportedExtension = imageExtensions.some((extension) =>
+    normalizedName.endsWith(extension),
+  );
+
+  if (file.type && !imageMimeTypes.includes(file.type)) {
     throw new Error(
-      `${file.name} no es compatible. Usa fotos JPG, JPEG, PNG o WEBP.`,
+      `${file.name} no es compatible. Usa fotos JPG/JPEG, PNG o WEBP.`,
+    );
+  }
+
+  if (!file.type && !hasSupportedExtension) {
+    throw new Error(
+      `${file.name} no tiene un formato reconocido. En iPhone elegi fotos JPEG, no HEIC.`,
     );
   }
 
@@ -104,7 +116,10 @@ async function compressPhoto(file: File) {
   canvas.height = height;
   context.drawImage(image, 0, 0, width, height);
 
-  let outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
+  let outputType =
+    file.type === "image/png" || normalizedName.endsWith(".png")
+      ? "image/png"
+      : "image/jpeg";
   let quality = outputType === "image/png" ? 0.92 : 0.82;
   let blob = await canvasToBlob(canvas, outputType, quality);
 
@@ -244,12 +259,16 @@ function loadGoogleMaps() {
 
 function PropertyForm({
   form,
+  isSaving,
   setForm,
+  status,
   submitProperty,
   user,
 }: {
   form: FormState;
+  isSaving: boolean;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  status: string;
   submitProperty: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   user: AuthModel;
 }) {
@@ -360,6 +379,7 @@ function PropertyForm({
         <input
           accept="image/*"
           className="rounded-md border border-dashed border-black/20 px-3 py-3 font-normal"
+          disabled={isSaving}
           multiple
           onChange={(event) =>
             setForm((current) => ({
@@ -373,12 +393,17 @@ function PropertyForm({
           Acepta JPG/JPEG, PNG o WEBP. Las fotos se optimizan antes de publicar.
         </span>
       </label>
+      {status ? (
+        <p className="rounded-md border border-black/10 bg-[#f7f5f0] px-3 py-2 text-sm font-normal leading-6 text-black/70">
+          {status}
+        </p>
+      ) : null}
       <button
         className="rounded-md bg-[#6e7d5b] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-black/30"
-        disabled={!user}
+        disabled={!user || isSaving}
         type="submit"
       >
-        {form.id ? "Guardar cambios" : "Publicar"}
+        {isSaving ? "Publicando..." : form.id ? "Guardar cambios" : "Publicar"}
       </button>
     </form>
   );
@@ -394,6 +419,7 @@ export default function PropertyApp() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [search, setSearch] = useState("");
@@ -619,6 +645,8 @@ export default function PropertyApp() {
   async function submitProperty(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (isSaving) return;
+
     if (!user) {
       setStatus("Inicia sesion con Google para publicar.");
       return;
@@ -637,6 +665,7 @@ export default function PropertyApp() {
     }
 
     try {
+      setIsSaving(true);
       setStatus("Optimizando fotos...");
       const optimizedPhotos = await Promise.all(form.photos.map(compressPhoto));
       const payload = new FormData();
@@ -670,6 +699,8 @@ export default function PropertyApp() {
           ? error.message
           : "No se pudo guardar. Revisa PocketBase, las reglas de acceso y los campos requeridos.",
       );
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -803,21 +834,6 @@ export default function PropertyApp() {
                 title="Mapa de Gran Catamarca"
               />
             )}
-            <div className="absolute left-4 top-4 max-w-[280px] rounded-md bg-white/95 p-4 shadow-sm">
-              <p className="text-sm font-semibold">Propiedades en venta</p>
-              <p className="mt-1 text-sm leading-6 text-black/60">
-                Si sos vendedor, navega libremente por el mapa y hace click en
-                la ubicacion exacta para publicar ahi.
-              </p>
-              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#6e7d5b]">
-              {isLoading
-                  ? "Cargando"
-                  : isSellerSession
-                    ? `${filteredProperties.length} propias`
-                    : `${filteredProperties.length} de ${properties.length} visibles`}
-              </p>
-            </div>
-
             {!googleMapsApiKey
               ? filteredProperties.map((property) => {
                   const position = mapPosition(property);
@@ -881,7 +897,9 @@ export default function PropertyApp() {
               </div>
               <PropertyForm
                 form={form}
+                isSaving={isSaving}
                 setForm={setForm}
+                status={status}
                 submitProperty={submitProperty}
                 user={user}
               />
