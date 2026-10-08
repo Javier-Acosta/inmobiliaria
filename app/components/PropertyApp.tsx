@@ -37,11 +37,14 @@ const emptyForm: FormState = {
 };
 
 const catamarcaBounds = {
-  north: -25.9,
-  south: -30.4,
-  west: -68.8,
-  east: -64.2,
+  north: -28.405,
+  south: -28.545,
+  west: -65.855,
+  east: -65.68,
 };
+
+const capitalMapUrl =
+  "https://maps.google.com/maps?q=San%20Fernando%20del%20Valle%20de%20Catamarca%2C%20Catamarca%2C%20Argentina&z=13&output=embed";
 
 function modelName(model: AuthModel) {
   if (!model) return "";
@@ -73,6 +76,25 @@ export default function PropertyApp() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  const filteredProperties = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) return properties;
+
+    return properties.filter((property) =>
+      [
+        property.title,
+        property.description,
+        property.locationLabel,
+        formatPrice(property),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [properties, search]);
 
   const loadProperties = useCallback(async () => {
     setIsLoading(true);
@@ -145,6 +167,26 @@ export default function PropertyApp() {
       photos: null,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function selectLocationFromMap(event: React.MouseEvent<HTMLButtonElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width;
+    const y = (event.clientY - bounds.top) / bounds.height;
+    const longitude =
+      catamarcaBounds.west + x * (catamarcaBounds.east - catamarcaBounds.west);
+    const latitude =
+      catamarcaBounds.north - y * (catamarcaBounds.north - catamarcaBounds.south);
+
+    setForm((current) => ({
+      ...current,
+      latitude: latitude.toFixed(6),
+      longitude: longitude.toFixed(6),
+      locationLabel:
+        current.locationLabel ||
+        "San Fernando del Valle de Catamarca, Catamarca",
+    }));
+    setStatus("Ubicacion seleccionada en el mapa. Podes ajustar la direccion.");
   }
 
   async function submitProperty(event: React.FormEvent<HTMLFormElement>) {
@@ -274,15 +316,22 @@ export default function PropertyApp() {
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-2xl font-semibold">
-                Mapa de propiedades en Catamarca
+                Mapa de propiedades en la Capital
               </h2>
               <p className="text-sm text-black/60">
-                Toca una foto para abrir la ficha y revisar la zona.
+                Busca una zona de San Fernando del Valle de Catamarca y toca una
+                foto para abrir la ficha.
               </p>
             </div>
-            <span className="text-sm text-black/50">
-              {isLoading ? "Cargando..." : `${properties.length} publicadas`}
-            </span>
+            <label className="w-full max-w-sm text-sm font-medium md:text-right">
+              Buscar zona
+              <input
+                className="mt-2 w-full rounded-md border border-black/15 bg-white px-3 py-2 text-left font-normal outline-none focus:border-black"
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Ej: centro, norte, Valle Viejo"
+                value={search}
+              />
+            </label>
           </div>
 
           <div className="relative min-h-[520px] overflow-hidden rounded-md border border-black/10 bg-[#d9ded0] shadow-sm">
@@ -290,19 +339,24 @@ export default function PropertyApp() {
               className="absolute inset-0 h-full w-full"
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
-              src="https://maps.google.com/maps?q=Provincia%20de%20Catamarca%2C%20Argentina&z=7&output=embed"
-              title="Mapa de la provincia de Catamarca"
+              src={capitalMapUrl}
+              title="Mapa de San Fernando del Valle de Catamarca"
             />
             <div className="pointer-events-none absolute inset-0 bg-black/[0.03]" />
             <div className="absolute left-4 top-4 max-w-[280px] rounded-md bg-white/95 p-4 shadow-sm">
-              <p className="text-sm font-semibold">Buscar por zona</p>
+              <p className="text-sm font-semibold">Propiedades en venta</p>
               <p className="mt-1 text-sm leading-6 text-black/60">
-                Capital, Valle Viejo, Tinogasta y nuevas publicaciones aparecen
-                como fotos sobre el mapa.
+                Las fotos quedan persistidas en PocketBase y aparecen en el mapa
+                despues de publicarse.
+              </p>
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#6e7d5b]">
+                {isLoading
+                  ? "Cargando"
+                  : `${filteredProperties.length} de ${properties.length} visibles`}
               </p>
             </div>
 
-            {properties.map((property) => {
+            {filteredProperties.map((property) => {
               const position = mapPosition(property);
 
               return (
@@ -331,6 +385,12 @@ export default function PropertyApp() {
                 </button>
               );
             })}
+
+            {!isLoading && filteredProperties.length === 0 ? (
+              <div className="absolute bottom-4 left-4 right-4 rounded-md bg-white/95 p-4 text-sm text-black/60 shadow-sm md:left-auto md:w-[320px]">
+                No hay propiedades para esa busqueda. Proba con otra zona.
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -354,6 +414,75 @@ export default function PropertyApp() {
               ) : null}
             </div>
 
+            {!user ? (
+              <div className="mb-5 rounded-md border border-[#6e7d5b]/25 bg-[#f7f5f0] p-4 text-sm text-black/70">
+                Para publicar una propiedad, el vendedor debe iniciar sesion con
+                Google.
+                <button
+                  className="mt-3 w-full rounded-md bg-black px-4 py-2 text-sm font-semibold text-white"
+                  onClick={loginWithGoogle}
+                  type="button"
+                >
+                  Login con Google
+                </button>
+              </div>
+            ) : null}
+
+            <div className="mb-5 overflow-hidden rounded-md border border-black/10 bg-[#f7f5f0]">
+              <div className="relative h-[240px]">
+                <iframe
+                  className="absolute inset-0 h-full w-full"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  src={capitalMapUrl}
+                  title="Seleccionar ubicacion de la propiedad"
+                />
+                <button
+                  aria-label="Seleccionar ubicacion de la propiedad en el mapa"
+                  className="absolute inset-0 cursor-crosshair bg-transparent"
+                  onClick={selectLocationFromMap}
+                  type="button"
+                />
+                {form.latitude && form.longitude ? (
+                  <span
+                    className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#6e7d5b] shadow-lg"
+                    style={{
+                      left: mapPosition({
+                        id: "form-location",
+                        title: "",
+                        description: "",
+                        price: 0,
+                        currency: defaultCurrency,
+                        photos: [],
+                        locationLabel: "",
+                        latitude: Number(form.latitude),
+                        longitude: Number(form.longitude),
+                        author: "",
+                        status: "published",
+                      }).left,
+                      top: mapPosition({
+                        id: "form-location",
+                        title: "",
+                        description: "",
+                        price: 0,
+                        currency: defaultCurrency,
+                        photos: [],
+                        locationLabel: "",
+                        latitude: Number(form.latitude),
+                        longitude: Number(form.longitude),
+                        author: "",
+                        status: "published",
+                      }).top,
+                    }}
+                  />
+                ) : null}
+              </div>
+              <p className="px-4 py-3 text-sm text-black/60">
+                Hace click en el mapa para marcar la ubicacion. Luego completa
+                direccion, fotos, precio, titulo y comentario.
+              </p>
+            </div>
+
             <div className="grid gap-4">
               <label className="grid gap-1 text-sm font-medium">
                 Titulo
@@ -369,7 +498,7 @@ export default function PropertyApp() {
                 />
               </label>
               <label className="grid gap-1 text-sm font-medium">
-                Descripcion
+                Comentario
                 <textarea
                   className="min-h-28 rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
                   onChange={(event) =>
@@ -412,7 +541,7 @@ export default function PropertyApp() {
                 </label>
               </div>
               <label className="grid gap-1 text-sm font-medium">
-                Ubicacion
+                Direccion o zona
                 <input
                   className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
                   onChange={(event) =>
@@ -421,7 +550,7 @@ export default function PropertyApp() {
                       locationLabel: event.target.value,
                     }))
                   }
-                  placeholder="Barrio, ciudad o direccion"
+                  placeholder="Barrio, calle o zona"
                   value={form.locationLabel}
                 />
               </label>
@@ -471,7 +600,8 @@ export default function PropertyApp() {
                 />
               </label>
               <button
-                className="rounded-md bg-[#6e7d5b] px-4 py-3 text-sm font-semibold text-white"
+                className="rounded-md bg-[#6e7d5b] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-black/30"
+                disabled={!user}
                 type="submit"
               >
                 {form.id ? "Guardar cambios" : "Publicar"}
@@ -488,12 +618,14 @@ export default function PropertyApp() {
                 </p>
               </div>
               <span className="text-sm text-black/50">
-                {isLoading ? "Cargando..." : `${properties.length} publicadas`}
+                {isLoading
+                  ? "Cargando..."
+                  : `${filteredProperties.length} publicadas`}
               </span>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {properties.map((property) => (
+              {filteredProperties.map((property) => (
                 <article
                   className="overflow-hidden rounded-md border border-black/10 bg-white shadow-sm"
                   key={property.id}
