@@ -1,6 +1,13 @@
-export const pocketbaseUrl =
+const configuredPocketbaseUrl =
   process.env.NEXT_PUBLIC_POCKETBASE_URL?.replace(/\/$/, "") ??
   "http://127.0.0.1:8090";
+
+export const pocketbaseUrl =
+  typeof window !== "undefined" &&
+  window.location.protocol === "https:" &&
+  configuredPocketbaseUrl.startsWith("http://")
+    ? configuredPocketbaseUrl.replace(/^http:/, "https:")
+    : configuredPocketbaseUrl;
 
 export const defaultCurrency =
   process.env.NEXT_PUBLIC_DEFAULT_CURRENCY?.trim() || "ARS";
