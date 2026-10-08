@@ -1,0 +1,53 @@
+# Spec Delta
+
+## Purpose
+
+Define la experiencia central para publicar, consultar y administrar propiedades inmobiliarias con fotos, descripcion, precio y datos persistidos.
+
+## ADDED Requirements
+
+### Requirement: Public property listing
+The system SHALL show published properties with photos, price, short description and enough location context to understand the offer.
+
+#### Scenario: Visitor views a property card
+- **WHEN** a visitor opens the property listing experience
+- **THEN** the system shows each published property with at least one photo, price, short description and location summary
+
+### Requirement: Authenticated property publishing
+The system SHALL allow only authenticated users to create property publications with photos, price, description and exact location.
+
+#### Scenario: Authenticated user publishes a property
+- **WHEN** an authenticated user submits valid property photos, price, description and location
+- **THEN** the system saves the property and makes it available as a published listing
+
+#### Scenario: Anonymous user attempts to publish
+- **WHEN** a visitor without a session tries to publish a property
+- **THEN** the system requires login before accepting the publication
+
+### Requirement: Property photo upload
+The system SHALL allow the property author to upload one or more property photos and preserve them with the listing.
+
+#### Scenario: Author adds photos
+- **WHEN** the author uploads valid image files while creating or editing a property
+- **THEN** the system associates those photos with the property for later display
+
+### Requirement: Property editing
+The system SHALL allow a property author to edit photos, description, price and location of their own publications.
+
+#### Scenario: Author saves changes
+- **WHEN** the author updates valid fields for one of their properties and saves
+- **THEN** the system persists the changes and shows the updated publication
+
+### Requirement: Property deletion
+The system SHALL allow a property author to delete their own publications.
+
+#### Scenario: Author deletes a property
+- **WHEN** the author confirms deletion of one of their properties
+- **THEN** the system removes the property from public listings
+
+### Requirement: Author-only management
+The system SHALL prevent users from editing or deleting properties they do not own.
+
+#### Scenario: User attempts to edit another author's property
+- **WHEN** an authenticated user requests an edit or delete action for another author's property
+- **THEN** the system rejects the action and leaves the property unchanged
