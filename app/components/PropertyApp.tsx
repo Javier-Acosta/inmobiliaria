@@ -36,16 +36,16 @@ const emptyForm: FormState = {
   photos: null,
 };
 
-const catamarcaBounds = {
-  north: -28.405,
-  south: -28.545,
-  west: -65.855,
-  east: -65.68,
+const fallbackBounds = {
+  north: -28.27,
+  south: -28.67,
+  west: -65.95,
+  east: -65.58,
 };
 
-const capitalMapUrl =
-  "https://maps.google.com/maps?q=San%20Fernando%20del%20Valle%20de%20Catamarca%2C%20Catamarca%2C%20Argentina&z=13&output=embed";
-const capitalCenter = { lat: -28.4696, lng: -65.7852 };
+const granCatamarcaMapUrl =
+  "https://maps.google.com/maps?q=Gran%20Catamarca%2C%20Catamarca%2C%20Argentina&z=11&output=embed";
+const granCatamarcaCenter = { lat: -28.485, lng: -65.74 };
 
 type GoogleMap = {
   addListener: (eventName: string, callback: (event: GoogleMapClickEvent) => void) => {
@@ -102,12 +102,12 @@ function modelName(model: AuthModel) {
 
 function mapPosition(property: PropertyListing) {
   const rawLeft =
-    ((property.longitude - catamarcaBounds.west) /
-      (catamarcaBounds.east - catamarcaBounds.west)) *
+    ((property.longitude - fallbackBounds.west) /
+      (fallbackBounds.east - fallbackBounds.west)) *
     100;
   const rawTop =
-    ((catamarcaBounds.north - property.latitude) /
-      (catamarcaBounds.north - catamarcaBounds.south)) *
+    ((fallbackBounds.north - property.latitude) /
+      (fallbackBounds.north - fallbackBounds.south)) *
     100;
 
   return {
@@ -351,12 +351,12 @@ export default function PropertyApp() {
         if (!google || cancelled || !mapContainerRef.current) return;
 
         const map = new google.maps.Map(mapContainerRef.current, {
-          center: capitalCenter,
+          center: granCatamarcaCenter,
           clickableIcons: false,
           fullscreenControl: true,
           mapTypeControl: false,
           streetViewControl: false,
-          zoom: 14,
+          zoom: 12,
         });
 
         listener = map.addListener("click", (event) => {
@@ -373,7 +373,7 @@ export default function PropertyApp() {
             longitude: event.latLng!.lng().toFixed(6),
             locationLabel:
               current.locationLabel ||
-              "San Fernando del Valle de Catamarca, Catamarca",
+              "Gran Catamarca, Catamarca",
           }));
           setIsEditorOpen(true);
           setStatus("Ubicacion exacta seleccionada. Completa los datos.");
@@ -497,26 +497,6 @@ export default function PropertyApp() {
     });
     setIsEditorOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function selectLocationFromMap(event: React.MouseEvent<HTMLButtonElement>) {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - bounds.left) / bounds.width;
-    const y = (event.clientY - bounds.top) / bounds.height;
-    const longitude =
-      catamarcaBounds.west + x * (catamarcaBounds.east - catamarcaBounds.west);
-    const latitude =
-      catamarcaBounds.north - y * (catamarcaBounds.north - catamarcaBounds.south);
-
-    setForm((current) => ({
-      ...current,
-      latitude: latitude.toFixed(6),
-      longitude: longitude.toFixed(6),
-      locationLabel:
-        current.locationLabel ||
-        "San Fernando del Valle de Catamarca, Catamarca",
-    }));
-    setStatus("Ubicacion seleccionada en el mapa. Podes ajustar la direccion.");
   }
 
   async function submitProperty(event: React.FormEvent<HTMLFormElement>) {
@@ -647,11 +627,11 @@ export default function PropertyApp() {
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-2xl font-semibold">
-                Mapa de propiedades en la Capital
+                Mapa de propiedades en Gran Catamarca
               </h2>
               <p className="text-sm text-black/60">
-                Busca una zona de San Fernando del Valle de Catamarca y toca una
-                foto para abrir la ficha.
+                Move el mapa con el dedo o mouse, hace zoom hasta Valle Viejo,
+                La Carrera o la zona exacta, y toca una foto para abrir la ficha.
               </p>
             </div>
             <label className="w-full max-w-sm text-sm font-medium md:text-right">
@@ -673,15 +653,15 @@ export default function PropertyApp() {
                 className="absolute inset-0 h-full w-full"
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
-                src={capitalMapUrl}
-                title="Mapa de San Fernando del Valle de Catamarca"
+                src={granCatamarcaMapUrl}
+                title="Mapa de Gran Catamarca"
               />
             )}
             <div className="absolute left-4 top-4 max-w-[280px] rounded-md bg-white/95 p-4 shadow-sm">
               <p className="text-sm font-semibold">Propiedades en venta</p>
               <p className="mt-1 text-sm leading-6 text-black/60">
-                Hace zoom hasta la ubicacion exacta. Si sos vendedor, inicia
-                sesion y hace click en el mapa para publicar ahi.
+                Si sos vendedor, navega libremente por el mapa y hace click en
+                la ubicacion exacta para publicar ahi.
               </p>
               <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#6e7d5b]">
                 {isLoading
@@ -793,60 +773,11 @@ export default function PropertyApp() {
               </div>
             ) : null}
 
-            <div className="mb-5 overflow-hidden rounded-md border border-black/10 bg-[#f7f5f0]">
-              <div className="relative h-[240px]">
-                <iframe
-                  className="absolute inset-0 h-full w-full"
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  src={capitalMapUrl}
-                  title="Seleccionar ubicacion de la propiedad"
-                />
-                <button
-                  aria-label="Seleccionar ubicacion de la propiedad en el mapa"
-                  className="absolute inset-0 cursor-crosshair bg-transparent"
-                  onClick={selectLocationFromMap}
-                  type="button"
-                />
-                {form.latitude && form.longitude ? (
-                  <span
-                    className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#6e7d5b] shadow-lg"
-                    style={{
-                      left: mapPosition({
-                        id: "form-location",
-                        title: "",
-                        description: "",
-                        price: 0,
-                        currency: defaultCurrency,
-                        photos: [],
-                        locationLabel: "",
-                        latitude: Number(form.latitude),
-                        longitude: Number(form.longitude),
-                        author: "",
-                        status: "published",
-                      }).left,
-                      top: mapPosition({
-                        id: "form-location",
-                        title: "",
-                        description: "",
-                        price: 0,
-                        currency: defaultCurrency,
-                        photos: [],
-                        locationLabel: "",
-                        latitude: Number(form.latitude),
-                        longitude: Number(form.longitude),
-                        author: "",
-                        status: "published",
-                      }).top,
-                    }}
-                  />
-                ) : null}
-              </div>
-              <p className="px-4 py-3 text-sm text-black/60">
-                Hace click en el mapa para marcar la ubicacion. Luego completa
-                direccion, fotos, precio, titulo y comentario.
-              </p>
-            </div>
+            <p className="mb-5 rounded-md border border-black/10 bg-[#f7f5f0] px-4 py-3 text-sm text-black/60">
+              Para cargar una venta, usa el mapa principal: navega hasta la zona
+              exacta, hace zoom y hace click. Se abrira el formulario con las
+              coordenadas seleccionadas.
+            </p>
 
             <PropertyForm
               form={form}
