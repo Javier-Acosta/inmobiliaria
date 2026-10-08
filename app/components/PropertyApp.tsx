@@ -1,10 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthModel } from "pocketbase";
 
-import { defaultCurrency } from "@/lib/config";
+import { defaultCurrency, googleMapsApiKey } from "@/lib/config";
 import { getPocketBase } from "@/lib/pocketbase";
 import {
   demoProperties,
@@ -45,6 +45,54 @@ const catamarcaBounds = {
 
 const capitalMapUrl =
   "https://maps.google.com/maps?q=San%20Fernando%20del%20Valle%20de%20Catamarca%2C%20Catamarca%2C%20Argentina&z=13&output=embed";
+const capitalCenter = { lat: -28.4696, lng: -65.7852 };
+
+type GoogleMap = {
+  addListener: (eventName: string, callback: (event: GoogleMapClickEvent) => void) => {
+    remove: () => void;
+  };
+};
+
+type GoogleMapClickEvent = {
+  latLng?: {
+    lat: () => number;
+    lng: () => number;
+  };
+};
+
+type GoogleMapsRuntime = {
+  maps: {
+    LatLng: new (lat: number, lng: number) => unknown;
+    Map: new (
+      element: HTMLElement,
+      options: {
+        center: { lat: number; lng: number };
+        clickableIcons?: boolean;
+        fullscreenControl?: boolean;
+        mapTypeControl?: boolean;
+        streetViewControl?: boolean;
+        zoom: number;
+      },
+    ) => GoogleMap;
+    OverlayView: new () => {
+      draw: () => void;
+      getPanes: () => { overlayMouseTarget?: HTMLElement } | null;
+      getProjection: () => {
+        fromLatLngToDivPixel: (latLng: unknown) => { x: number; y: number } | null;
+      } | null;
+      onAdd: () => void;
+      onRemove: () => void;
+      setMap: (map: GoogleMap | null) => void;
+    };
+  };
+};
+
+declare global {
+  interface Window {
+    google?: GoogleMapsRuntime;
+    inmobiliariaGoogleMapsPromise?: Promise<GoogleMapsRuntime>;
+  }
+}
 
 function modelName(model: AuthModel) {
   if (!model) return "";
@@ -68,14 +116,181 @@ function mapPosition(property: PropertyListing) {
   };
 }
 
+function loadGoogleMaps() {
+  if (!googleMapsApiKey) return Promise.resolve(null);
+  if (window.google) return Promise.resolve(window.google);
+  if (window.inmobiliariaGoogleMapsPromise) {
+    return window.inmobiliariaGoogleMapsPromise;
+  }
+
+  window.inmobiliariaGoogleMapsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
+      googleMapsApiKey,
+    )}&v=weekly`;
+    script.onload = () => {
+      if (window.google) resolve(window.google);
+      else reject(new Error("Google Maps no quedo disponible."));
+    };
+    script.onerror = () => reject(new Error("No se pudo cargar Google Maps."));
+    document.head.appendChild(script);
+  });
+
+  return window.inmobiliariaGoogleMapsPromise;
+}
+
+function PropertyForm({
+  form,
+  setForm,
+  submitProperty,
+  user,
+}: {
+  form: FormState;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  submitProperty: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
+  user: AuthModel;
+}) {
+  return (
+    <form className="grid gap-4" onSubmit={submitProperty}>
+      <label className="grid gap-1 text-sm font-medium">
+        Titulo
+        <input
+          className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              title: event.target.value,
+            }))
+          }
+          value={form.title}
+        />
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Comentario
+        <textarea
+          className="min-h-28 rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              description: event.target.value,
+            }))
+          }
+          value={form.description}
+        />
+      </label>
+      <div className="grid grid-cols-[1fr_92px] gap-3">
+        <label className="grid gap-1 text-sm font-medium">
+          Precio
+          <input
+            className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+            min="0"
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                price: event.target.value,
+              }))
+            }
+            type="number"
+            value={form.price}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          Moneda
+          <input
+            className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                currency: event.target.value.toUpperCase(),
+              }))
+            }
+            value={form.currency}
+          />
+        </label>
+      </div>
+      <label className="grid gap-1 text-sm font-medium">
+        Direccion o zona
+        <input
+          className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              locationLabel: event.target.value,
+            }))
+          }
+          placeholder="Barrio, calle o zona"
+          value={form.locationLabel}
+        />
+      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="grid gap-1 text-sm font-medium">
+          Latitud
+          <input
+            className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                latitude: event.target.value,
+              }))
+            }
+            type="number"
+            value={form.latitude}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          Longitud
+          <input
+            className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                longitude: event.target.value,
+              }))
+            }
+            type="number"
+            value={form.longitude}
+          />
+        </label>
+      </div>
+      <label className="grid gap-1 text-sm font-medium">
+        Fotos
+        <input
+          accept="image/*"
+          className="rounded-md border border-dashed border-black/20 px-3 py-3 font-normal"
+          multiple
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              photos: event.target.files,
+            }))
+          }
+          type="file"
+        />
+      </label>
+      <button
+        className="rounded-md bg-[#6e7d5b] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-black/30"
+        disabled={!user}
+        type="submit"
+      >
+        {form.id ? "Guardar cambios" : "Publicar"}
+      </button>
+    </form>
+  );
+}
+
 export default function PropertyApp() {
   const pb = useMemo(() => getPocketBase(), []);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<GoogleMap | null>(null);
   const [properties, setProperties] = useState<PropertyListing[]>([]);
   const [selected, setSelected] = useState<PropertyListing | null>(null);
   const [user, setUser] = useState<AuthModel>(() => pb.authStore.model);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(false);
   const [search, setSearch] = useState("");
 
   const filteredProperties = useMemo(() => {
@@ -124,6 +339,120 @@ export default function PropertyApp() {
     });
   }, [loadProperties, pb]);
 
+  useEffect(() => {
+    let listener: { remove: () => void } | null = null;
+    let cancelled = false;
+
+    async function bootMap() {
+      if (!mapContainerRef.current || mapRef.current) return;
+
+      try {
+        const google = await loadGoogleMaps();
+        if (!google || cancelled || !mapContainerRef.current) return;
+
+        const map = new google.maps.Map(mapContainerRef.current, {
+          center: capitalCenter,
+          clickableIcons: false,
+          fullscreenControl: true,
+          mapTypeControl: false,
+          streetViewControl: false,
+          zoom: 14,
+        });
+
+        listener = map.addListener("click", (event) => {
+          if (!event.latLng) return;
+
+          if (!pb.authStore.model) {
+            setStatus("Inicia sesion con Google para publicar en esa ubicacion.");
+            return;
+          }
+
+          setForm((current) => ({
+            ...current,
+            latitude: event.latLng!.lat().toFixed(6),
+            longitude: event.latLng!.lng().toFixed(6),
+            locationLabel:
+              current.locationLabel ||
+              "San Fernando del Valle de Catamarca, Catamarca",
+          }));
+          setIsEditorOpen(true);
+          setStatus("Ubicacion exacta seleccionada. Completa los datos.");
+        });
+
+        mapRef.current = map;
+        setIsMapReady(true);
+      } catch {
+        setStatus("No se pudo cargar Google Maps. Revisa NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.");
+      }
+    }
+
+    void bootMap();
+
+    return () => {
+      cancelled = true;
+      listener?.remove();
+    };
+  }, [pb.authStore]);
+
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current || !window.google) return;
+
+    const google = window.google;
+    const overlays = filteredProperties.map((property) => {
+      const overlay = new google.maps.OverlayView();
+      let element: HTMLButtonElement | null = null;
+
+      overlay.onAdd = () => {
+        element = document.createElement("button");
+        element.type = "button";
+        element.className =
+          "absolute z-10 w-[96px] overflow-hidden rounded-md border-2 border-white bg-white text-left shadow-lg transition hover:z-20 hover:scale-105 focus:z-20 focus:outline-none focus:ring-4 focus:ring-[#6e7d5b]/30";
+        const photo = document.createElement("span");
+        photo.className = "block h-[72px] bg-[#e8e2d8]";
+
+        if (property.photos[0]) {
+          const image = document.createElement("img");
+          image.alt = property.title;
+          image.className = "h-full w-full object-cover";
+          image.src = property.photos[0];
+          photo.appendChild(image);
+        }
+
+        const price = document.createElement("span");
+        price.className = "block truncate px-2 py-1 text-xs font-semibold";
+        price.textContent = formatPrice(property);
+
+        element.append(photo, price);
+        element.addEventListener("click", () => setSelected(property));
+        overlay.getPanes()?.overlayMouseTarget?.appendChild(element);
+      };
+
+      overlay.draw = () => {
+        if (!element) return;
+        const projection = overlay.getProjection();
+        const point = projection?.fromLatLngToDivPixel(
+          new google.maps.LatLng(property.latitude, property.longitude),
+        );
+        if (!point) return;
+
+        element.style.left = `${point.x - 48}px`;
+        element.style.top = `${point.y - 52}px`;
+      };
+
+      overlay.onRemove = () => {
+        element?.remove();
+        element = null;
+      };
+
+      overlay.setMap(mapRef.current);
+      return overlay;
+    });
+
+    return () => {
+      overlays.forEach((overlay) => overlay.setMap(null));
+    };
+  }, [filteredProperties, isMapReady]);
+
   async function loginWithGoogle() {
     setStatus("Abriendo login con Google...");
     try {
@@ -166,6 +495,7 @@ export default function PropertyApp() {
       longitude: String(property.longitude),
       photos: null,
     });
+    setIsEditorOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -233,6 +563,7 @@ export default function PropertyApp() {
         setStatus("Propiedad publicada.");
       }
       setForm(emptyForm);
+      setIsEditorOpen(false);
       await loadProperties();
     } catch {
       setStatus(
@@ -334,20 +665,23 @@ export default function PropertyApp() {
             </label>
           </div>
 
-          <div className="relative min-h-[520px] overflow-hidden rounded-md border border-black/10 bg-[#d9ded0] shadow-sm">
-            <iframe
-              className="absolute inset-0 h-full w-full"
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              src={capitalMapUrl}
-              title="Mapa de San Fernando del Valle de Catamarca"
-            />
-            <div className="pointer-events-none absolute inset-0 bg-black/[0.03]" />
+          <div className="relative min-h-[560px] overflow-hidden rounded-md border border-black/10 bg-[#d9ded0] shadow-sm">
+            {googleMapsApiKey ? (
+              <div ref={mapContainerRef} className="absolute inset-0" />
+            ) : (
+              <iframe
+                className="absolute inset-0 h-full w-full"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                src={capitalMapUrl}
+                title="Mapa de San Fernando del Valle de Catamarca"
+              />
+            )}
             <div className="absolute left-4 top-4 max-w-[280px] rounded-md bg-white/95 p-4 shadow-sm">
               <p className="text-sm font-semibold">Propiedades en venta</p>
               <p className="mt-1 text-sm leading-6 text-black/60">
-                Las fotos quedan persistidas en PocketBase y aparecen en el mapa
-                despues de publicarse.
+                Hace zoom hasta la ubicacion exacta. Si sos vendedor, inicia
+                sesion y hace click en el mapa para publicar ahi.
               </p>
               <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#6e7d5b]">
                 {isLoading
@@ -356,35 +690,37 @@ export default function PropertyApp() {
               </p>
             </div>
 
-            {filteredProperties.map((property) => {
-              const position = mapPosition(property);
+            {!googleMapsApiKey
+              ? filteredProperties.map((property) => {
+                  const position = mapPosition(property);
 
-              return (
-                <button
-                  className="absolute z-10 w-[92px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border-2 border-white bg-white text-left shadow-lg transition hover:z-20 hover:scale-105 focus:z-20 focus:outline-none focus:ring-4 focus:ring-[#6e7d5b]/30"
-                  key={`map-${property.id}`}
-                  onClick={() => setSelected(property)}
-                  style={position}
-                  type="button"
-                >
-                  <span className="relative block aspect-[4/3] bg-[#e8e2d8]">
-                    {property.photos[0] ? (
-                      <Image
-                        alt={property.title}
-                        className="object-cover"
-                        fill
-                        sizes="92px"
-                        src={property.photos[0]}
-                        unoptimized={property.photos[0].startsWith("http")}
-                      />
-                    ) : null}
-                  </span>
-                  <span className="block truncate px-2 py-1 text-xs font-semibold">
-                    {formatPrice(property)}
-                  </span>
-                </button>
-              );
-            })}
+                  return (
+                    <button
+                      className="absolute z-10 w-[92px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border-2 border-white bg-white text-left shadow-lg transition hover:z-20 hover:scale-105 focus:z-20 focus:outline-none focus:ring-4 focus:ring-[#6e7d5b]/30"
+                      key={`map-${property.id}`}
+                      onClick={() => setSelected(property)}
+                      style={position}
+                      type="button"
+                    >
+                      <span className="relative block aspect-[4/3] bg-[#e8e2d8]">
+                        {property.photos[0] ? (
+                          <Image
+                            alt={property.title}
+                            className="object-cover"
+                            fill
+                            sizes="92px"
+                            src={property.photos[0]}
+                            unoptimized={property.photos[0].startsWith("http")}
+                          />
+                        ) : null}
+                      </span>
+                      <span className="block truncate px-2 py-1 text-xs font-semibold">
+                        {formatPrice(property)}
+                      </span>
+                    </button>
+                  );
+                })
+              : null}
 
             {!isLoading && filteredProperties.length === 0 ? (
               <div className="absolute bottom-4 left-4 right-4 rounded-md bg-white/95 p-4 text-sm text-black/60 shadow-sm md:left-auto md:w-[320px]">
@@ -394,10 +730,39 @@ export default function PropertyApp() {
           </div>
         </section>
 
+        {isEditorOpen ? (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 py-6">
+            <div className="max-h-[92vh] w-full max-w-xl overflow-auto rounded-md bg-white p-5 shadow-xl">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium uppercase tracking-[0.14em] text-[#6e7d5b]">
+                    Vendedor
+                  </p>
+                  <h2 className="mt-1 text-2xl font-semibold">
+                    {form.id ? "Editar propiedad" : "Publicar en esta ubicacion"}
+                  </h2>
+                </div>
+                <button
+                  className="rounded-full border border-black/10 px-4 py-2 text-sm"
+                  onClick={() => setIsEditorOpen(false)}
+                  type="button"
+                >
+                  Cerrar
+                </button>
+              </div>
+              <PropertyForm
+                form={form}
+                setForm={setForm}
+                submitProperty={submitProperty}
+                user={user}
+              />
+            </div>
+          </div>
+        ) : null}
+
         <section className="grid gap-8 lg:grid-cols-[380px_1fr]">
-          <form
+          <div
             className="h-fit rounded-md border border-black/10 bg-white p-5 shadow-sm"
-            onSubmit={submitProperty}
           >
             <div className="mb-5 flex items-center justify-between gap-3">
               <h2 className="text-xl font-semibold">
@@ -483,131 +848,13 @@ export default function PropertyApp() {
               </p>
             </div>
 
-            <div className="grid gap-4">
-              <label className="grid gap-1 text-sm font-medium">
-                Titulo
-                <input
-                  className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                  value={form.title}
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Comentario
-                <textarea
-                  className="min-h-28 rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                  value={form.description}
-                />
-              </label>
-              <div className="grid grid-cols-[1fr_92px] gap-3">
-                <label className="grid gap-1 text-sm font-medium">
-                  Precio
-                  <input
-                    className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-                    min="0"
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        price: event.target.value,
-                      }))
-                    }
-                    type="number"
-                    value={form.price}
-                  />
-                </label>
-                <label className="grid gap-1 text-sm font-medium">
-                  Moneda
-                  <input
-                    className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        currency: event.target.value.toUpperCase(),
-                      }))
-                    }
-                    value={form.currency}
-                  />
-                </label>
-              </div>
-              <label className="grid gap-1 text-sm font-medium">
-                Direccion o zona
-                <input
-                  className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      locationLabel: event.target.value,
-                    }))
-                  }
-                  placeholder="Barrio, calle o zona"
-                  value={form.locationLabel}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="grid gap-1 text-sm font-medium">
-                  Latitud
-                  <input
-                    className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        latitude: event.target.value,
-                      }))
-                    }
-                    type="number"
-                    value={form.latitude}
-                  />
-                </label>
-                <label className="grid gap-1 text-sm font-medium">
-                  Longitud
-                  <input
-                    className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        longitude: event.target.value,
-                      }))
-                    }
-                    type="number"
-                    value={form.longitude}
-                  />
-                </label>
-              </div>
-              <label className="grid gap-1 text-sm font-medium">
-                Fotos
-                <input
-                  accept="image/*"
-                  className="rounded-md border border-dashed border-black/20 px-3 py-3 font-normal"
-                  multiple
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      photos: event.target.files,
-                    }))
-                  }
-                  type="file"
-                />
-              </label>
-              <button
-                className="rounded-md bg-[#6e7d5b] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-black/30"
-                disabled={!user}
-                type="submit"
-              >
-                {form.id ? "Guardar cambios" : "Publicar"}
-              </button>
-            </div>
-          </form>
+            <PropertyForm
+              form={form}
+              setForm={setForm}
+              submitProperty={submitProperty}
+              user={user}
+            />
+          </div>
 
           <section className="grid gap-5">
             <div className="flex items-end justify-between gap-4">

@@ -4,3 +4,6 @@ export const pocketbaseUrl =
 
 export const defaultCurrency =
   process.env.NEXT_PUBLIC_DEFAULT_CURRENCY?.trim() || "ARS";
+
+export const googleMapsApiKey =
+  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
