@@ -65,6 +65,20 @@ Eliminacion solo del autor:
 
 En PocketBase, configurar Google como proveedor OAuth con `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`. La app Next.js inicia el login contra PocketBase para que PocketBase conserve la identidad y aplique reglas de autoria.
 
+Redirect URI para Google Cloud:
+
+```txt
+https://inmobiliaria-pocketbase-95d45a-187-77-225-53.sslip.io/api/oauth2-redirect
+```
+
+Cuando tengas `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, podes cargarlos en `.env.local` y ejecutar:
+
+```bash
+node scripts/configure-pocketbase.mjs
+```
+
+El script habilita OAuth2 en la coleccion `users` y registra el provider `google` en PocketBase.
+
 ## Verificacion manual
 
 1. Iniciar PocketBase.

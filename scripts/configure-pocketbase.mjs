@@ -148,12 +148,47 @@ try {
   }
 
   const users = await pb.collections.getOne("users");
+  let configuredGoogle = false;
+
+  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
+    const currentProviders = users.oauth2?.providers ?? [];
+    const providers = [
+      ...currentProviders.filter((provider) => provider.name !== "google"),
+      {
+        name: "google",
+        clientId: env.GOOGLE_CLIENT_ID,
+        clientSecret: env.GOOGLE_CLIENT_SECRET,
+      },
+    ];
+
+    const updatedUsers = await pb.collections.update(users.id, {
+      oauth2: {
+        ...(users.oauth2 ?? {}),
+        enabled: true,
+        mappedFields: users.oauth2?.mappedFields ?? {
+          id: "",
+          name: "name",
+          username: "",
+          avatarURL: "avatar",
+        },
+        providers,
+      },
+    });
+
+    configuredGoogle = updatedUsers.oauth2?.providers?.some(
+      (provider) => provider.name === "google",
+    );
+  }
+
   console.log(
     JSON.stringify(
       {
         usersAuth: {
-          oauthEnabled: users.oauth2?.enabled ?? false,
-          providers: users.oauth2?.providers?.map((provider) => provider.name) ?? [],
+          oauthEnabled: configuredGoogle || users.oauth2?.enabled || false,
+          providers: configuredGoogle
+            ? ["google"]
+            : users.oauth2?.providers?.map((provider) => provider.name) ?? [],
+          configuredGoogle,
           canConfigureGoogle:
             Boolean(env.GOOGLE_CLIENT_ID) && Boolean(env.GOOGLE_CLIENT_SECRET),
         },
