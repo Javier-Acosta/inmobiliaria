@@ -36,10 +36,33 @@ const emptyForm: FormState = {
   photos: null,
 };
 
+const catamarcaBounds = {
+  north: -25.9,
+  south: -30.4,
+  west: -68.8,
+  east: -64.2,
+};
+
 function modelName(model: AuthModel) {
   if (!model) return "";
   const data = model as { name?: string; email?: string };
   return data.name || data.email || "Usuario";
+}
+
+function mapPosition(property: PropertyListing) {
+  const rawLeft =
+    ((property.longitude - catamarcaBounds.west) /
+      (catamarcaBounds.east - catamarcaBounds.west)) *
+    100;
+  const rawTop =
+    ((catamarcaBounds.north - property.latitude) /
+      (catamarcaBounds.north - catamarcaBounds.south)) *
+    100;
+
+  return {
+    left: `${Math.min(88, Math.max(8, rawLeft))}%`,
+    top: `${Math.min(84, Math.max(12, rawTop))}%`,
+  };
 }
 
 export default function PropertyApp() {
@@ -208,8 +231,12 @@ export default function PropertyApp() {
               Inmobiliaria
             </p>
             <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight sm:text-5xl">
-              Propiedades claras, ubicacion exacta y publicacion simple.
+              Elegi una zona de Catamarca y mira que propiedades hay cerca.
             </h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-black/60">
+              El comprador explora la provincia desde el mapa, compara fotos y
+              abre cada propiedad para ver precio, ubicacion y detalle.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {user ? (
@@ -242,6 +269,70 @@ export default function PropertyApp() {
             {status}
           </p>
         ) : null}
+
+        <section className="grid gap-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold">
+                Mapa de propiedades en Catamarca
+              </h2>
+              <p className="text-sm text-black/60">
+                Toca una foto para abrir la ficha y revisar la zona.
+              </p>
+            </div>
+            <span className="text-sm text-black/50">
+              {isLoading ? "Cargando..." : `${properties.length} publicadas`}
+            </span>
+          </div>
+
+          <div className="relative min-h-[520px] overflow-hidden rounded-md border border-black/10 bg-[#d9ded0] shadow-sm">
+            <iframe
+              className="absolute inset-0 h-full w-full"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              src="https://maps.google.com/maps?q=Provincia%20de%20Catamarca%2C%20Argentina&z=7&output=embed"
+              title="Mapa de la provincia de Catamarca"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-black/[0.03]" />
+            <div className="absolute left-4 top-4 max-w-[280px] rounded-md bg-white/95 p-4 shadow-sm">
+              <p className="text-sm font-semibold">Buscar por zona</p>
+              <p className="mt-1 text-sm leading-6 text-black/60">
+                Capital, Valle Viejo, Tinogasta y nuevas publicaciones aparecen
+                como fotos sobre el mapa.
+              </p>
+            </div>
+
+            {properties.map((property) => {
+              const position = mapPosition(property);
+
+              return (
+                <button
+                  className="absolute z-10 w-[92px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border-2 border-white bg-white text-left shadow-lg transition hover:z-20 hover:scale-105 focus:z-20 focus:outline-none focus:ring-4 focus:ring-[#6e7d5b]/30"
+                  key={`map-${property.id}`}
+                  onClick={() => setSelected(property)}
+                  style={position}
+                  type="button"
+                >
+                  <span className="relative block aspect-[4/3] bg-[#e8e2d8]">
+                    {property.photos[0] ? (
+                      <Image
+                        alt={property.title}
+                        className="object-cover"
+                        fill
+                        sizes="92px"
+                        src={property.photos[0]}
+                        unoptimized={property.photos[0].startsWith("http")}
+                      />
+                    ) : null}
+                  </span>
+                  <span className="block truncate px-2 py-1 text-xs font-semibold">
+                    {formatPrice(property)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
 
         <section className="grid gap-8 lg:grid-cols-[380px_1fr]">
           <form
@@ -391,9 +482,9 @@ export default function PropertyApp() {
           <section className="grid gap-5">
             <div className="flex items-end justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-semibold">Propiedades</h2>
+                <h2 className="text-2xl font-semibold">Propiedades destacadas</h2>
                 <p className="text-sm text-black/60">
-                  Fotos, precio y ubicacion en una vista simple.
+                  Una vista rapida para comparar despues de explorar el mapa.
                 </p>
               </div>
               <span className="text-sm text-black/50">
