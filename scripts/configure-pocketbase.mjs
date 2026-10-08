@@ -82,7 +82,7 @@ try {
       type: "select",
       required: true,
       maxSelect: 1,
-      values: ["published", "draft"],
+      values: ["published", "draft", "sold"],
     },
     { name: "created", type: "autodate", onCreate: true, onUpdate: false },
     { name: "updated", type: "autodate", onCreate: true, onUpdate: true },
@@ -92,9 +92,10 @@ try {
     const created = await pb.collections.create({
       name: "properties",
       type: "base",
-      listRule: 'status = "published"',
+      listRule:
+        '(status = "published" || status = "sold") || (@request.auth.id != "" && author = @request.auth.id)',
       viewRule:
-        'status = "published" || (@request.auth.id != "" && author = @request.auth.id)',
+        '(status = "published" || status = "sold") || (@request.auth.id != "" && author = @request.auth.id)',
       createRule: '@request.auth.id != "" && author = @request.auth.id',
       updateRule: '@request.auth.id != "" && author = @request.auth.id',
       deleteRule: '@request.auth.id != "" && author = @request.auth.id',
@@ -133,13 +134,39 @@ try {
             ],
           })
         : existing;
+    const sellerListRule =
+      '(status = "published" || status = "sold") || (@request.auth.id != "" && author = @request.auth.id)';
+    const statusField = updated.fields.find((field) => field.name === "status");
+    const needsSoldStatus =
+      statusField?.type === "select" && !statusField.values?.includes("sold");
+    const needsRuleUpdate =
+      updated.listRule !== sellerListRule || updated.viewRule !== sellerListRule;
+    const finalCollection =
+      needsSoldStatus || needsRuleUpdate
+        ? await pb.collections.update(updated.id, {
+            listRule: sellerListRule,
+            viewRule: sellerListRule,
+            fields: updated.fields.map((field) =>
+              field.name === "status"
+                ? { ...field, values: ["published", "draft", "sold"] }
+                : field,
+            ),
+            indexes: [
+              "CREATE INDEX idx_properties_status_created ON properties (status, created)",
+              "CREATE INDEX idx_properties_author ON properties (author)",
+            ],
+          })
+        : updated;
 
     console.log(
       JSON.stringify(
         {
-          status: missingDateFields.length > 0 ? "updated" : "exists",
-          collection: updated.name,
-          fields: updated.fields.map((field) => field.name),
+          status:
+            missingDateFields.length > 0 || needsSoldStatus || needsRuleUpdate
+              ? "updated"
+              : "exists",
+          collection: finalCollection.name,
+          fields: finalCollection.fields.map((field) => field.name),
         },
         null,
         2,

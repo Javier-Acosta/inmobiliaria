@@ -13,7 +13,7 @@ export type PropertyListing = {
   latitude: number;
   longitude: number;
   author: string;
-  status: "published" | "draft";
+  status: "published" | "draft" | "sold";
 };
 
 export const demoProperties: PropertyListing[] = [
@@ -47,7 +47,7 @@ export const demoProperties: PropertyListing[] = [
     latitude: -28.5065,
     longitude: -65.7231,
     author: "demo",
-    status: "published",
+    status: "sold",
   },
   {
     id: "demo-zona-norte",
@@ -85,7 +85,10 @@ export function propertyFromRecord(record: RecordModel): PropertyListing {
     latitude: Number(record.latitude ?? 0),
     longitude: Number(record.longitude ?? 0),
     author: String(record.author ?? ""),
-    status: record.status === "draft" ? "draft" : "published",
+    status:
+      record.status === "draft" || record.status === "sold"
+        ? record.status
+        : "published",
   };
 }
 

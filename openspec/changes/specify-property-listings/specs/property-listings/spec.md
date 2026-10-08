@@ -51,3 +51,28 @@ The system SHALL prevent users from editing or deleting properties they do not o
 #### Scenario: User attempts to edit another author's property
 - **WHEN** an authenticated user requests an edit or delete action for another author's property
 - **THEN** the system rejects the action and leaves the property unchanged
+
+### Requirement: Seller property management
+The system SHALL show authenticated sellers a management view containing only properties authored by their current session.
+
+#### Scenario: Seller opens their management session
+- **WHEN** an authenticated seller opens the seller management view
+- **THEN** the system shows only properties where the author matches the current user
+
+### Requirement: Property sold state
+The system SHALL allow a property author to mark their own publication as sold.
+
+#### Scenario: Author marks a property as sold
+- **WHEN** the author uses the sold action for one of their properties
+- **THEN** the system persists the property status as sold
+
+#### Scenario: User attempts to mark another author's property as sold
+- **WHEN** an authenticated user requests the sold action for another author's property
+- **THEN** the system rejects the action and leaves the property status unchanged
+
+### Requirement: Sold property badge
+The system SHALL display a visible red sold ribbon with the text VENDIDO on sold property images.
+
+#### Scenario: Visitor views a sold property
+- **WHEN** a property with sold status is displayed
+- **THEN** the primary property image includes a red ribbon labeled VENDIDO

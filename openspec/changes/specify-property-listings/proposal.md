@@ -9,6 +9,9 @@ La aplicacion necesita definir su primera experiencia util: publicar y explorar 
 - Crear una experiencia publica para explorar propiedades con fotos, descripcion breve, precio y ubicacion en Google Maps.
 - Permitir que usuarios autenticados con Google publiquen propiedades.
 - Permitir que el autor de una propiedad edite, elimine y guarde cambios de sus publicaciones.
+- Permitir que el vendedor administre solo sus propias publicaciones en su sesion.
+- Permitir que el vendedor marque una publicacion propia como vendida.
+- Mostrar las propiedades vendidas con una franja roja visible con el texto `VENDIDO`.
 - Guardar la informacion de propiedades, fotos, ubicacion y autoria en PocketBase.
 - Definir una base visual moderna, minimalista y facil de entender para pantallas de listado, detalle y formulario.
 

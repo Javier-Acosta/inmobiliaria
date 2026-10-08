@@ -24,6 +24,10 @@
 - [x] 4.2 Implementar edicion de propiedades propias, y verificar que los cambios de fotos, descripcion, precio y ubicacion se persistan.
 - [x] 4.3 Implementar eliminacion de propiedades propias con confirmacion, y verificar que la propiedad deje de aparecer en listados publicos.
 - [x] 4.4 Mostrar errores de validacion de forma clara y verificar que el formulario no permita guardar datos incompletos esenciales.
+- [x] 4.5 Ampliar el estado de propiedades para soportar `sold`, y verificar que PocketBase acepte el nuevo valor.
+- [x] 4.6 Implementar vista de vendedor con solo propiedades propias, y verificar que no muestre publicaciones de otros vendedores.
+- [x] 4.7 Agregar accion de marcar como vendido para propiedades propias, y verificar que otro vendedor no pueda marcar publicaciones ajenas.
+- [x] 4.8 Mostrar franja roja `VENDIDO` sobre imagenes de propiedades vendidas, y verificar que aparezca en listado y detalle.
 
 ## 5. Exploracion publica y mapa
 

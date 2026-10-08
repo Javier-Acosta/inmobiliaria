@@ -15,6 +15,7 @@ import {
 
 type FormState = {
   id?: string;
+  status?: PropertyListing["status"];
   title: string;
   description: string;
   price: string;
@@ -22,7 +23,7 @@ type FormState = {
   locationLabel: string;
   latitude: string;
   longitude: string;
-  photos: FileList | null;
+  photos: File[];
 };
 
 const emptyForm: FormState = {
@@ -33,8 +34,109 @@ const emptyForm: FormState = {
   locationLabel: "",
   latitude: "",
   longitude: "",
-  photos: null,
+  photos: [],
 };
+
+const maxPhotoDimension = 1600;
+const maxCompressedPhotoBytes = 1_600_000;
+const imageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+
+function formatBytes(bytes: number) {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function loadImage(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new window.Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("No se pudo leer la imagen."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number,
+) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("No se pudo comprimir la imagen."));
+      },
+      type,
+      quality,
+    );
+  });
+}
+
+async function compressPhoto(file: File) {
+  if (!imageMimeTypes.includes(file.type)) {
+    throw new Error(
+      `${file.name} no es compatible. Usa fotos JPG, JPEG, PNG o WEBP.`,
+    );
+  }
+
+  const image = await loadImage(file);
+  const scale = Math.min(
+    1,
+    maxPhotoDimension / Math.max(image.naturalWidth, image.naturalHeight),
+  );
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("El navegador no pudo preparar la compresion de imagen.");
+  }
+
+  canvas.width = width;
+  canvas.height = height;
+  context.drawImage(image, 0, 0, width, height);
+
+  let outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
+  let quality = outputType === "image/png" ? 0.92 : 0.82;
+  let blob = await canvasToBlob(canvas, outputType, quality);
+
+  while (blob.size > maxCompressedPhotoBytes && quality > 0.45) {
+    outputType = "image/jpeg";
+    quality -= 0.08;
+    blob = await canvasToBlob(canvas, outputType, quality);
+  }
+
+  if (blob.size > maxCompressedPhotoBytes) {
+    throw new Error(
+      `${file.name} sigue pesando ${formatBytes(
+        blob.size,
+      )}. Proba con una foto mas chica.`,
+    );
+  }
+
+  const extension = outputType === "image/png" ? "png" : "jpg";
+  const baseName = file.name.replace(/\.[^.]+$/, "") || "propiedad";
+  return new File([blob], `${baseName}.${extension}`, {
+    type: outputType,
+    lastModified: Date.now(),
+  });
+}
+
+function SoldRibbon() {
+  return (
+    <span className="absolute right-[-34px] top-4 z-10 rotate-45 bg-red-700 px-10 py-1 text-xs font-bold tracking-[0.16em] text-white shadow-md">
+      VENDIDO
+    </span>
+  );
+}
 
 const fallbackBounds = {
   north: -28.27,
@@ -262,11 +364,14 @@ function PropertyForm({
           onChange={(event) =>
             setForm((current) => ({
               ...current,
-              photos: event.target.files,
+              photos: Array.from(event.target.files ?? []),
             }))
           }
           type="file"
         />
+        <span className="text-xs font-normal leading-5 text-black/50">
+          Acepta JPG/JPEG, PNG o WEBP. Las fotos se optimizan antes de publicar.
+        </span>
       </label>
       <button
         className="rounded-md bg-[#6e7d5b] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-black/30"
@@ -292,6 +397,7 @@ export default function PropertyApp() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [search, setSearch] = useState("");
+  const isSellerSession = Boolean(user);
 
   const filteredProperties = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -314,12 +420,15 @@ export default function PropertyApp() {
   const loadProperties = useCallback(async () => {
     setIsLoading(true);
     try {
+      const filter = user?.id
+        ? pb.filter("author = {:author}", { author: user.id })
+        : 'status = "published" || status = "sold"';
       const records = await pb.collection("properties").getFullList({
-        filter: 'status = "published"',
+        filter,
         sort: "-created",
       });
       const items = records.map(propertyFromRecord);
-      setProperties(items.length ? items : demoProperties);
+      setProperties(items.length || user ? items : demoProperties);
       setStatus("");
     } catch {
       setProperties(demoProperties);
@@ -329,7 +438,7 @@ export default function PropertyApp() {
     } finally {
       setIsLoading(false);
     }
-  }, [pb]);
+  }, [pb, user]);
 
   useEffect(() => {
     void Promise.resolve().then(loadProperties);
@@ -423,6 +532,13 @@ export default function PropertyApp() {
         price.textContent = formatPrice(property);
 
         element.append(photo, price);
+        if (property.status === "sold") {
+          const ribbon = document.createElement("span");
+          ribbon.className =
+            "absolute right-[-32px] top-3 rotate-45 bg-red-700 px-8 py-0.5 text-[10px] font-bold tracking-widest text-white";
+          ribbon.textContent = "VENDIDO";
+          element.appendChild(ribbon);
+        }
         element.addEventListener("click", () => setSelected(property));
         overlay.getPanes()?.overlayMouseTarget?.appendChild(element);
       };
@@ -493,7 +609,8 @@ export default function PropertyApp() {
       locationLabel: property.locationLabel,
       latitude: String(property.latitude),
       longitude: String(property.longitude),
-      photos: null,
+      photos: [],
+      status: property.status,
     });
     setIsEditorOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -519,22 +636,24 @@ export default function PropertyApp() {
       return;
     }
 
-    const payload = new FormData();
-    payload.set("title", form.title.trim());
-    payload.set("description", form.description.trim());
-    payload.set("price", form.price);
-    payload.set("currency", form.currency || defaultCurrency);
-    payload.set("locationLabel", form.locationLabel.trim());
-    payload.set("latitude", form.latitude);
-    payload.set("longitude", form.longitude);
-    payload.set("status", "published");
-    payload.set("author", user.id);
-
-    Array.from(form.photos ?? []).forEach((file) => {
-      payload.append("photos", file);
-    });
-
     try {
+      setStatus("Optimizando fotos...");
+      const optimizedPhotos = await Promise.all(form.photos.map(compressPhoto));
+      const payload = new FormData();
+      payload.set("title", form.title.trim());
+      payload.set("description", form.description.trim());
+      payload.set("price", form.price);
+      payload.set("currency", form.currency || defaultCurrency);
+      payload.set("locationLabel", form.locationLabel.trim());
+      payload.set("latitude", form.latitude);
+      payload.set("longitude", form.longitude);
+      payload.set("status", form.status ?? "published");
+      payload.set("author", user.id);
+
+      optimizedPhotos.forEach((file) => {
+        payload.append("photos", file);
+      });
+
       if (form.id) {
         await pb.collection("properties").update(form.id, payload);
         setStatus("Cambios guardados.");
@@ -545,9 +664,11 @@ export default function PropertyApp() {
       setForm(emptyForm);
       setIsEditorOpen(false);
       await loadProperties();
-    } catch {
+    } catch (error) {
       setStatus(
-        "No se pudo guardar. Revisa PocketBase, las reglas de acceso y los campos requeridos.",
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar. Revisa PocketBase, las reglas de acceso y los campos requeridos.",
       );
     }
   }
@@ -572,6 +693,31 @@ export default function PropertyApp() {
       await loadProperties();
     } catch {
       setStatus("No se pudo eliminar la propiedad.");
+    }
+  }
+
+  async function markPropertySold(property: PropertyListing) {
+    if (!user) {
+      setStatus("Inicia sesion con Google para marcar como vendido.");
+      return;
+    }
+
+    if (property.author && property.author !== user.id) {
+      setStatus("Solo el autor puede marcar esta propiedad como vendida.");
+      return;
+    }
+
+    try {
+      await pb.collection("properties").update(property.id, {
+        status: "sold",
+      });
+      setSelected((current) =>
+        current?.id === property.id ? { ...current, status: "sold" } : current,
+      );
+      setStatus("Propiedad marcada como vendida.");
+      await loadProperties();
+    } catch {
+      setStatus("No se pudo marcar como vendida.");
     }
   }
 
@@ -664,9 +810,11 @@ export default function PropertyApp() {
                 la ubicacion exacta para publicar ahi.
               </p>
               <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#6e7d5b]">
-                {isLoading
+              {isLoading
                   ? "Cargando"
-                  : `${filteredProperties.length} de ${properties.length} visibles`}
+                  : isSellerSession
+                    ? `${filteredProperties.length} propias`
+                    : `${filteredProperties.length} de ${properties.length} visibles`}
               </p>
             </div>
 
@@ -683,6 +831,7 @@ export default function PropertyApp() {
                       type="button"
                     >
                       <span className="relative block aspect-[4/3] bg-[#e8e2d8]">
+                        {property.status === "sold" ? <SoldRibbon /> : null}
                         {property.photos[0] ? (
                           <Image
                             alt={property.title}
@@ -740,65 +889,24 @@ export default function PropertyApp() {
           </div>
         ) : null}
 
-        <section className="grid gap-8 lg:grid-cols-[380px_1fr]">
-          <div
-            className="h-fit rounded-md border border-black/10 bg-white p-5 shadow-sm"
-          >
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">
-                {form.id ? "Editar propiedad" : "Publicar propiedad"}
-              </h2>
-              {form.id ? (
-                <button
-                  className="text-sm text-[#6e7d5b]"
-                  onClick={() => setForm(emptyForm)}
-                  type="button"
-                >
-                  Cancelar
-                </button>
-              ) : null}
-            </div>
-
-            {!user ? (
-              <div className="mb-5 rounded-md border border-[#6e7d5b]/25 bg-[#f7f5f0] p-4 text-sm text-black/70">
-                Para publicar una propiedad, el vendedor debe iniciar sesion con
-                Google.
-                <button
-                  className="mt-3 w-full rounded-md bg-black px-4 py-2 text-sm font-semibold text-white"
-                  onClick={loginWithGoogle}
-                  type="button"
-                >
-                  Login con Google
-                </button>
-              </div>
-            ) : null}
-
-            <p className="mb-5 rounded-md border border-black/10 bg-[#f7f5f0] px-4 py-3 text-sm text-black/60">
-              Para cargar una venta, usa el mapa principal: navega hasta la zona
-              exacta, hace zoom y hace click. Se abrira el formulario con las
-              coordenadas seleccionadas.
-            </p>
-
-            <PropertyForm
-              form={form}
-              setForm={setForm}
-              submitProperty={submitProperty}
-              user={user}
-            />
-          </div>
-
-          <section className="grid gap-5">
+        <section className="grid gap-5">
             <div className="flex items-end justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-semibold">Propiedades destacadas</h2>
+              <h2 className="text-2xl font-semibold">
+                {isSellerSession ? "Mis publicaciones" : "Propiedades destacadas"}
+              </h2>
                 <p className="text-sm text-black/60">
-                  Una vista rapida para comparar despues de explorar el mapa.
+                  {isSellerSession
+                    ? "En sesion vendedor solo aparecen tus propiedades."
+                    : "Una vista rapida para comparar despues de explorar el mapa."}
                 </p>
               </div>
               <span className="text-sm text-black/50">
                 {isLoading
                   ? "Cargando..."
-                  : `${filteredProperties.length} publicadas`}
+                  : isSellerSession
+                    ? `${filteredProperties.length} propias`
+                    : `${filteredProperties.length} publicadas`}
               </span>
             </div>
 
@@ -814,6 +922,7 @@ export default function PropertyApp() {
                     type="button"
                   >
                     <div className="relative aspect-[4/3] bg-[#e8e2d8]">
+                      {property.status === "sold" ? <SoldRibbon /> : null}
                       {property.photos[0] ? (
                         <Image
                           alt={property.title}
@@ -838,26 +947,9 @@ export default function PropertyApp() {
                       </p>
                     </div>
                   </button>
-                  <div className="flex gap-2 border-t border-black/10 p-3">
-                    <button
-                      className="rounded-md border border-black/10 px-3 py-2 text-sm"
-                      onClick={() => editProperty(property)}
-                      type="button"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      className="rounded-md border border-black/10 px-3 py-2 text-sm text-red-700"
-                      onClick={() => deleteProperty(property)}
-                      type="button"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
                 </article>
               ))}
             </div>
-          </section>
         </section>
 
         {selected ? (
@@ -874,17 +966,46 @@ export default function PropertyApp() {
                   {formatPrice(selected)}
                 </p>
               </div>
-              <button
-                className="rounded-full border border-black/10 px-4 py-2 text-sm"
-                onClick={() => setSelected(null)}
-                type="button"
-              >
-                Cerrar
-              </button>
+              <div className="flex flex-wrap justify-end gap-2">
+                {user && selected.author === user.id ? (
+                  <>
+                    <button
+                      className="rounded-full border border-black/10 px-4 py-2 text-sm"
+                      onClick={() => editProperty(selected)}
+                      type="button"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      className="rounded-full border border-red-700/20 px-4 py-2 text-sm text-red-700 disabled:opacity-50"
+                      disabled={selected.status === "sold"}
+                      onClick={() => markPropertySold(selected)}
+                      type="button"
+                    >
+                      Vendido
+                    </button>
+                    <button
+                      className="rounded-full border border-red-700/20 px-4 py-2 text-sm text-red-700"
+                      onClick={() => deleteProperty(selected)}
+                      type="button"
+                    >
+                      Eliminar
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  className="rounded-full border border-black/10 px-4 py-2 text-sm"
+                  onClick={() => setSelected(null)}
+                  type="button"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
             <div className="grid gap-5 lg:grid-cols-[1fr_420px]">
               <div className="grid gap-4">
                 <div className="relative aspect-[16/9] overflow-hidden rounded-md bg-[#e8e2d8]">
+                  {selected.status === "sold" ? <SoldRibbon /> : null}
                   {selected.photos[0] ? (
                     <Image
                       alt={selected.title}

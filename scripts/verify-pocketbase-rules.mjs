@@ -21,7 +21,7 @@ const password = `Test-${Date.now()}-Aa12345`;
 const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const authorEmail = `author-${suffix}@example.invalid`;
 const otherEmail = `other-${suffix}@example.invalid`;
-const createdIds = { users: [], property: null };
+const createdIds = { users: [], properties: [] };
 
 function pbClient() {
   const pb = new PocketBase(env.POCKETBASE_URL);
@@ -92,7 +92,21 @@ async function main() {
   data.append("photos", tinyPngFile());
 
   const property = await author.pb.collection("properties").create(data);
-  createdIds.property = property.id;
+  createdIds.properties.push(property.id);
+
+  const otherData = new FormData();
+  otherData.set("title", "Propiedad temporal de otro vendedor");
+  otherData.set("description", "Registro temporal de otro vendedor.");
+  otherData.set("price", "2000");
+  otherData.set("currency", "ARS");
+  otherData.set("locationLabel", "Valle Viejo");
+  otherData.set("latitude", "-28.5065");
+  otherData.set("longitude", "-65.7231");
+  otherData.set("author", other.user.id);
+  otherData.set("status", "published");
+  otherData.append("photos", tinyPngFile());
+  const otherProperty = await other.pb.collection("properties").create(otherData);
+  createdIds.properties.push(otherProperty.id);
 
   let otherUpdateRejected = false;
   try {
@@ -107,6 +121,23 @@ async function main() {
     title: "Propiedad temporal editada",
   });
 
+  let otherSoldRejected = false;
+  try {
+    await other.pb.collection("properties").update(property.id, {
+      status: "sold",
+    });
+  } catch (error) {
+    otherSoldRejected = error.status === 403 || error.status === 404;
+  }
+
+  const sold = await author.pb.collection("properties").update(property.id, {
+    status: "sold",
+  });
+
+  const authorList = await author.pb.collection("properties").getFullList({
+    filter: author.pb.filter("author = {:author}", { author: author.user.id }),
+  });
+
   let otherDeleteRejected = false;
   try {
     await other.pb.collection("properties").delete(property.id);
@@ -115,7 +146,9 @@ async function main() {
   }
 
   await author.pb.collection("properties").delete(property.id);
-  createdIds.property = null;
+  createdIds.properties = createdIds.properties.filter((id) => id !== property.id);
+  await other.pb.collection("properties").delete(otherProperty.id);
+  createdIds.properties = createdIds.properties.filter((id) => id !== otherProperty.id);
 
   console.log(
     JSON.stringify(
@@ -124,6 +157,10 @@ async function main() {
         authorCreateSucceeded: Boolean(property.id),
         otherUpdateRejected,
         authorUpdateSucceeded: updated.title === "Propiedad temporal editada",
+        otherSoldRejected,
+        authorSoldSucceeded: sold.status === "sold",
+        sellerListContainsOnlyOwnProperties:
+          authorList.length === 1 && authorList[0].author === author.user.id,
         otherDeleteRejected,
         authorDeleteSucceeded: true,
       },
@@ -141,8 +178,8 @@ try {
     .collection("_superusers")
     .authWithPassword(env.POCKETBASE_SUPERUSER_EMAIL, env.POCKETBASE_SUPERUSER_PASSWORD);
 
-  if (createdIds.property) {
-    await cleanup.collection("properties").delete(createdIds.property).catch(() => {});
+  for (const id of createdIds.properties) {
+    await cleanup.collection("properties").delete(id).catch(() => {});
   }
 
   for (const id of createdIds.users) {
