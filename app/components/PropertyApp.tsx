@@ -18,6 +18,7 @@ type FormState = {
   status?: PropertyListing["status"];
   title: string;
   description: string;
+  propertyType: string;
   price: string;
   currency: string;
   locationLabel: string;
@@ -31,6 +32,7 @@ type ListingView = "all" | "mine" | "demo";
 const emptyForm: FormState = {
   title: "",
   description: "",
+  propertyType: "",
   price: "",
   currency: defaultCurrency,
   locationLabel: "",
@@ -43,6 +45,14 @@ const maxPhotoDimension = 1600;
 const maxCompressedPhotoBytes = 1_600_000;
 const imageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 const imageExtensions = [".jpg", ".jpeg", ".png", ".webp"];
+const propertyTypeOptions = [
+  "Casa",
+  "Departamento",
+  "Terreno",
+  "Local",
+  "Quinta",
+  "Duplex",
+];
 
 function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -313,6 +323,26 @@ function PropertyForm({
           value={form.description}
         />
       </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Tipo de propiedad
+        <select
+          className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              propertyType: event.target.value,
+            }))
+          }
+          value={form.propertyType}
+        >
+          <option value="">Seleccionar tipo</option>
+          {propertyTypeOptions.map((propertyType) => (
+            <option key={propertyType} value={propertyType}>
+              {propertyType}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
         <label className="grid gap-1 text-sm font-medium">
           Precio
@@ -369,7 +399,6 @@ function PropertyForm({
               locationLabel: event.target.value,
             }))
           }
-          placeholder="Barrio, calle o zona"
           value={form.locationLabel}
         />
       </label>
@@ -473,6 +502,7 @@ export default function PropertyApp() {
       [
         property.title,
         property.description,
+        property.propertyType,
         property.locationLabel,
         formatPrice(property),
       ]
@@ -562,9 +592,6 @@ export default function PropertyApp() {
             ...current,
             latitude: event.latLng!.lat().toFixed(6),
             longitude: event.latLng!.lng().toFixed(6),
-            locationLabel:
-              current.locationLabel ||
-              "Gran Catamarca, Catamarca",
           }));
           setIsEditorOpen(true);
           setStatus("Ubicacion exacta seleccionada. Completa los datos.");
@@ -687,6 +714,7 @@ export default function PropertyApp() {
       id: property.id,
       title: property.title,
       description: property.description,
+      propertyType: property.propertyType,
       price: String(property.price),
       currency: property.currency,
       locationLabel: property.locationLabel,
@@ -712,11 +740,12 @@ export default function PropertyApp() {
     if (
       !form.title.trim() ||
       !form.description.trim() ||
+      !form.propertyType ||
       !form.locationLabel.trim() ||
       !form.latitude ||
       !form.longitude
     ) {
-      setStatus("Completa titulo, descripcion, precio y ubicacion.");
+      setStatus("Completa titulo, descripcion, tipo, precio y ubicacion.");
       return;
     }
 
@@ -734,6 +763,7 @@ export default function PropertyApp() {
       const payload = new FormData();
       payload.set("title", form.title.trim());
       payload.set("description", form.description.trim());
+      payload.set("propertyType", form.propertyType);
       payload.set("price", String(price));
       payload.set("currency", form.currency || defaultCurrency);
       payload.set("locationLabel", form.locationLabel.trim());
@@ -1060,6 +1090,9 @@ export default function PropertyApp() {
                         {formatPrice(property)}
                       </p>
                       <h3 className="font-medium">{property.title}</h3>
+                      <p className="text-sm font-medium text-black/50">
+                        {property.propertyType}
+                      </p>
                       <p className="line-clamp-2 text-sm text-black/60">
                         {property.description}
                       </p>
@@ -1084,6 +1117,9 @@ export default function PropertyApp() {
               <div>
                 <p className="text-sm text-[#6e7d5b]">
                   {selected.locationLabel}
+                </p>
+                <p className="mt-1 text-sm font-medium text-black/50">
+                  {selected.propertyType}
                 </p>
                 <h2 className="mt-1 text-3xl font-semibold">
                   {selected.title}

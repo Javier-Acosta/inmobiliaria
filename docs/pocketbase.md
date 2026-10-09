@@ -9,7 +9,7 @@ Copiar `.env.example` a `.env.local` y completar los valores reales:
 ```env
 NEXT_PUBLIC_POCKETBASE_URL=http://127.0.0.1:8090
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
-NEXT_PUBLIC_DEFAULT_CURRENCY=ARS
+NEXT_PUBLIC_DEFAULT_CURRENCY=USD
 POCKETBASE_SUPERUSER_EMAIL=
 POCKETBASE_SUPERUSER_PASSWORD=
 GOOGLE_CLIENT_ID=
@@ -26,21 +26,22 @@ Crear una coleccion base llamada `properties` con estos campos:
 | --- | --- | --- | --- |
 | `title` | text | si | Nombre corto de la propiedad. |
 | `description` | editor o text | si | Descripcion breve visible en listado y detalle. |
+| `propertyType` | select | no | Valores recomendados: `Casa`, `Departamento`, `Terreno`, `Local`, `Quinta`, `Duplex`. |
 | `price` | number | si | Precio publicado. |
-| `currency` | select | si | Valor inicial recomendado: `ARS`. |
+| `currency` | select | si | Valor inicial recomendado: `USD`. |
 | `photos` | file | si | Multiple, solo imagenes. |
 | `locationLabel` | text | si | Direccion, barrio o zona legible. |
 | `latitude` | number | si | Coordenada para Google Maps. |
 | `longitude` | number | si | Coordenada para Google Maps. |
 | `author` | relation | si | Relacion a `_pb_users_auth_`. |
-| `status` | select | si | Valores iniciales: `published`, `draft`. |
+| `status` | select | si | Valores iniciales: `published`, `draft`, `sold`. |
 
 ## Reglas recomendadas
 
 Lectura publica solo de propiedades publicadas:
 
 ```txt
-status = "published"
+status = "published" || status = "sold"
 ```
 
 Creacion solo con usuario autenticado y autoria propia:

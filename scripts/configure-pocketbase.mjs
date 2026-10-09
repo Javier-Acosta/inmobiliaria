@@ -50,6 +50,13 @@ try {
   const baseFields = [
     { name: "title", type: "text", required: true, max: 160 },
     { name: "description", type: "editor", required: true },
+    {
+      name: "propertyType",
+      type: "select",
+      required: false,
+      maxSelect: 1,
+      values: ["Casa", "Departamento", "Terreno", "Local", "Quinta", "Duplex"],
+    },
     { name: "price", type: "number", required: true, min: 0 },
     {
       name: "currency",
@@ -119,15 +126,17 @@ try {
     );
   } else {
     const existingFieldNames = new Set(existing.fields.map((field) => field.name));
-    const missingDateFields = baseFields.filter(
+    const missingFields = baseFields.filter(
       (field) =>
-        (field.name === "created" || field.name === "updated") &&
+        (field.name === "propertyType" ||
+          field.name === "created" ||
+          field.name === "updated") &&
         !existingFieldNames.has(field.name),
     );
     const updated =
-      missingDateFields.length > 0
+      missingFields.length > 0
         ? await pb.collections.update(existing.id, {
-            fields: [...existing.fields, ...missingDateFields],
+            fields: [...existing.fields, ...missingFields],
             indexes: [
               "CREATE INDEX idx_properties_status_created ON properties (status, created)",
               "CREATE INDEX idx_properties_author ON properties (author)",
@@ -137,18 +146,38 @@ try {
     const sellerListRule =
       '(status = "published" || status = "sold") || (@request.auth.id != "" && author = @request.auth.id)';
     const statusField = updated.fields.find((field) => field.name === "status");
+    const propertyTypeField = updated.fields.find(
+      (field) => field.name === "propertyType",
+    );
     const needsSoldStatus =
       statusField?.type === "select" && !statusField.values?.includes("sold");
+    const needsPropertyTypeUpdate =
+      propertyTypeField?.type === "select" &&
+      !["Casa", "Departamento", "Terreno", "Local", "Quinta", "Duplex"].every(
+        (value) => propertyTypeField.values?.includes(value),
+      );
     const needsRuleUpdate =
       updated.listRule !== sellerListRule || updated.viewRule !== sellerListRule;
     const finalCollection =
-      needsSoldStatus || needsRuleUpdate
+      needsSoldStatus || needsPropertyTypeUpdate || needsRuleUpdate
         ? await pb.collections.update(updated.id, {
             listRule: sellerListRule,
             viewRule: sellerListRule,
             fields: updated.fields.map((field) =>
               field.name === "status"
                 ? { ...field, values: ["published", "draft", "sold"] }
+                : field.name === "propertyType"
+                  ? {
+                      ...field,
+                      values: [
+                        "Casa",
+                        "Departamento",
+                        "Terreno",
+                        "Local",
+                        "Quinta",
+                        "Duplex",
+                      ],
+                    }
                 : field,
             ),
             indexes: [
@@ -162,7 +191,10 @@ try {
       JSON.stringify(
         {
           status:
-            missingDateFields.length > 0 || needsSoldStatus || needsRuleUpdate
+            missingFields.length > 0 ||
+            needsSoldStatus ||
+            needsPropertyTypeUpdate ||
+            needsRuleUpdate
               ? "updated"
               : "exists",
           collection: finalCollection.name,

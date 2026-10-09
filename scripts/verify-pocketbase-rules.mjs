@@ -67,6 +67,7 @@ async function main() {
     await anonymous.collection("properties").create({
       title: "No auth",
       description: "No auth",
+      propertyType: "Casa",
       price: 1,
       currency: "ARS",
       locationLabel: "Test",
@@ -82,6 +83,7 @@ async function main() {
   const data = new FormData();
   data.set("title", "Propiedad temporal de prueba");
   data.set("description", "Registro temporal para verificar reglas.");
+  data.set("propertyType", "Casa");
   data.set("price", "1000");
   data.set("currency", "ARS");
   data.set("locationLabel", "San Fernando del Valle de Catamarca");
@@ -97,6 +99,7 @@ async function main() {
   const otherData = new FormData();
   otherData.set("title", "Propiedad temporal de otro vendedor");
   otherData.set("description", "Registro temporal de otro vendedor.");
+  otherData.set("propertyType", "Terreno");
   otherData.set("price", "2000");
   otherData.set("currency", "ARS");
   otherData.set("locationLabel", "Valle Viejo");
