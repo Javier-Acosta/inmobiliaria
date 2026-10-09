@@ -298,8 +298,56 @@ function phoneDigits(phone: string) {
   return phone.replace(/\D/g, "");
 }
 
+function localPhoneInput(phone: string) {
+  const digits = phoneDigits(phone);
+
+  if (digits.startsWith("54") && digits.length > 10) {
+    return digits.slice(2);
+  }
+
+  return digits.slice(0, 10);
+}
+
+function normalizeContactPhone(phone: string) {
+  const digits = phoneDigits(phone);
+
+  if (digits.startsWith("54") && digits.length >= 12) {
+    return `+${digits}`;
+  }
+
+  if (digits.length === 10) {
+    return `+54${digits}`;
+  }
+
+  return phone.trim();
+}
+
+function displayContactPhone(phone: string) {
+  return localPhoneInput(phone) || phone;
+}
+
+function whatsappDigits(phone: string) {
+  const digits = phoneDigits(phone);
+
+  if (digits.length === 10) {
+    return `54${digits}`;
+  }
+
+  return digits;
+}
+
+function phoneHref(phone: string) {
+  const digits = phoneDigits(phone);
+
+  if (digits.length === 10) {
+    return `+54${digits}`;
+  }
+
+  return digits ? `+${digits}` : "";
+}
+
 function whatsappUrl(property: PropertyListing) {
-  const digits = phoneDigits(property.contactPhone);
+  const digits = whatsappDigits(property.contactPhone);
   const message = `Hola, quiero consultar por ${property.title}`;
 
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
@@ -400,12 +448,17 @@ function PropertyForm({
           onChange={(event) =>
             setForm((current) => ({
               ...current,
-              contactPhone: event.target.value,
+              contactPhone: localPhoneInput(event.target.value),
             }))
           }
-          placeholder="+54 383 ..."
+          maxLength={10}
+          pattern="[0-9]*"
+          placeholder="3834523879"
           value={form.contactPhone}
         />
+        <span className="text-xs font-normal leading-5 text-black/50">
+          Escribilo sin +54, solo los 10 numeros.
+        </span>
       </label>
       <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
         <label className="grid gap-1 text-sm font-medium">
@@ -842,7 +895,7 @@ export default function PropertyApp() {
       title: property.title,
       description: property.description,
       propertyType: property.propertyType,
-      contactPhone: property.contactPhone,
+      contactPhone: localPhoneInput(property.contactPhone),
       price: String(property.price),
       currency: property.currency,
       locationLabel: property.locationLabel,
@@ -881,9 +934,15 @@ export default function PropertyApp() {
     }
 
     const price = Number(form.price);
+    const contactPhone = normalizeContactPhone(form.contactPhone);
 
     if (!Number.isFinite(price) || price <= 0) {
       setStatus("Ingresa un precio mayor a cero.");
+      return;
+    }
+
+    if (phoneDigits(contactPhone).length < 12) {
+      setStatus("Ingresa un telefono local de 10 numeros, por ejemplo 3834523879.");
       return;
     }
 
@@ -895,7 +954,7 @@ export default function PropertyApp() {
       payload.set("title", form.title.trim());
       payload.set("description", form.description.trim());
       payload.set("propertyType", form.propertyType);
-      payload.set("contactPhone", form.contactPhone.trim());
+      payload.set("contactPhone", contactPhone);
       payload.set("price", String(price));
       payload.set("currency", form.currency || defaultCurrency);
       payload.set("locationLabel", form.locationLabel.trim());
@@ -1289,7 +1348,7 @@ export default function PropertyApp() {
                       </p>
                       {property.contactPhone ? (
                         <p className="text-sm text-black/50">
-                          {property.contactPhone}
+                          {displayContactPhone(property.contactPhone)}
                         </p>
                       ) : null}
                       {isDemoProperty(property) ? (
@@ -1322,7 +1381,7 @@ export default function PropertyApp() {
                 </p>
                 {selected.contactPhone ? (
                   <p className="mt-2 text-sm text-black/60">
-                    Contacto: {selected.contactPhone}
+                    Contacto: {displayContactPhone(selected.contactPhone)}
                   </p>
                 ) : null}
               </div>
@@ -1339,7 +1398,7 @@ export default function PropertyApp() {
                     </a>
                     <a
                       className="rounded-full border border-black/10 px-4 py-2 text-sm"
-                      href={`tel:${phoneDigits(selected.contactPhone)}`}
+                      href={`tel:${phoneHref(selected.contactPhone)}`}
                     >
                       Llamar
                     </a>
