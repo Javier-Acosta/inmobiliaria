@@ -27,6 +27,7 @@ Crear una coleccion base llamada `properties` con estos campos:
 | `title` | text | si | Nombre corto de la propiedad. |
 | `description` | editor o text | si | Descripcion breve visible en listado y detalle. |
 | `propertyType` | select | no | Valores recomendados: `Casa`, `Departamento`, `Terreno`, `Local`, `Quinta`, `Duplex`. |
+| `contactPhone` | text | no | Telefono o WhatsApp visible para consultas. |
 | `price` | number | si | Precio publicado. |
 | `currency` | select | si | Valor inicial recomendado: `USD`. |
 | `photos` | file | si | Multiple, solo imagenes. |

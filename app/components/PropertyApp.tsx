@@ -19,6 +19,7 @@ type FormState = {
   title: string;
   description: string;
   propertyType: string;
+  contactPhone: string;
   price: string;
   currency: string;
   locationLabel: string;
@@ -33,6 +34,7 @@ const emptyForm: FormState = {
   title: "",
   description: "",
   propertyType: "",
+  contactPhone: "",
   price: "",
   currency: defaultCurrency,
   locationLabel: "",
@@ -256,6 +258,17 @@ function isDemoProperty(property: PropertyListing) {
   return property.author === "demo";
 }
 
+function phoneDigits(phone: string) {
+  return phone.replace(/\D/g, "");
+}
+
+function whatsappUrl(property: PropertyListing) {
+  const digits = phoneDigits(property.contactPhone);
+  const message = `Hola, quiero consultar por ${property.title}`;
+
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
 function loadGoogleMaps() {
   if (!googleMapsApiKey) return Promise.resolve(null);
   if (window.google) return Promise.resolve(window.google);
@@ -342,6 +355,21 @@ function PropertyForm({
             </option>
           ))}
         </select>
+      </label>
+      <label className="grid gap-1 text-sm font-medium">
+        Telefono o WhatsApp
+        <input
+          className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+          inputMode="tel"
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              contactPhone: event.target.value,
+            }))
+          }
+          placeholder="+54 383 ..."
+          value={form.contactPhone}
+        />
       </label>
       <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
         <label className="grid gap-1 text-sm font-medium">
@@ -503,6 +531,7 @@ export default function PropertyApp() {
         property.title,
         property.description,
         property.propertyType,
+        property.contactPhone,
         property.locationLabel,
         formatPrice(property),
       ]
@@ -727,6 +756,7 @@ export default function PropertyApp() {
       title: property.title,
       description: property.description,
       propertyType: property.propertyType,
+      contactPhone: property.contactPhone,
       price: String(property.price),
       currency: property.currency,
       locationLabel: property.locationLabel,
@@ -753,11 +783,14 @@ export default function PropertyApp() {
       !form.title.trim() ||
       !form.description.trim() ||
       !form.propertyType ||
+      !form.contactPhone.trim() ||
       !form.locationLabel.trim() ||
       !form.latitude ||
       !form.longitude
     ) {
-      setStatus("Completa titulo, descripcion, tipo, precio y ubicacion.");
+      setStatus(
+        "Completa titulo, descripcion, tipo, telefono, precio y ubicacion.",
+      );
       return;
     }
 
@@ -776,6 +809,7 @@ export default function PropertyApp() {
       payload.set("title", form.title.trim());
       payload.set("description", form.description.trim());
       payload.set("propertyType", form.propertyType);
+      payload.set("contactPhone", form.contactPhone.trim());
       payload.set("price", String(price));
       payload.set("currency", form.currency || defaultCurrency);
       payload.set("locationLabel", form.locationLabel.trim());
@@ -1118,6 +1152,11 @@ export default function PropertyApp() {
                       <p className="text-sm text-[#6e7d5b]">
                         {property.locationLabel}
                       </p>
+                      {property.contactPhone ? (
+                        <p className="text-sm text-black/50">
+                          {property.contactPhone}
+                        </p>
+                      ) : null}
                       {isDemoProperty(property) ? (
                         <span className="w-fit rounded-full bg-[#f7f5f0] px-2 py-1 text-xs font-medium text-black/50">
                           Ejemplo
@@ -1146,8 +1185,31 @@ export default function PropertyApp() {
                 <p className="mt-2 text-xl font-semibold">
                   {formatPrice(selected)}
                 </p>
+                {selected.contactPhone ? (
+                  <p className="mt-2 text-sm text-black/60">
+                    Contacto: {selected.contactPhone}
+                  </p>
+                ) : null}
               </div>
               <div className="flex flex-wrap justify-end gap-2">
+                {selected.contactPhone ? (
+                  <>
+                    <a
+                      className="rounded-full bg-[#25d366] px-4 py-2 text-sm font-semibold text-white"
+                      href={whatsappUrl(selected)}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      WhatsApp
+                    </a>
+                    <a
+                      className="rounded-full border border-black/10 px-4 py-2 text-sm"
+                      href={`tel:${phoneDigits(selected.contactPhone)}`}
+                    >
+                      Llamar
+                    </a>
+                  </>
+                ) : null}
                 {user && selected.author === user.id ? (
                   <>
                     <button

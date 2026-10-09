@@ -68,6 +68,7 @@ async function main() {
       title: "No auth",
       description: "No auth",
       propertyType: "Casa",
+      contactPhone: "+543834000000",
       price: 1,
       currency: "ARS",
       locationLabel: "Test",
@@ -84,6 +85,7 @@ async function main() {
   data.set("title", "Propiedad temporal de prueba");
   data.set("description", "Registro temporal para verificar reglas.");
   data.set("propertyType", "Casa");
+  data.set("contactPhone", "+543834000001");
   data.set("price", "1000");
   data.set("currency", "ARS");
   data.set("locationLabel", "San Fernando del Valle de Catamarca");
@@ -100,6 +102,7 @@ async function main() {
   secondData.set("title", "Segunda propiedad temporal del mismo vendedor");
   secondData.set("description", "Registro temporal para verificar multiples publicaciones.");
   secondData.set("propertyType", "Departamento");
+  secondData.set("contactPhone", "+543834000002");
   secondData.set("price", "1500");
   secondData.set("currency", "USD");
   secondData.set("locationLabel", "Zona norte");
@@ -116,6 +119,7 @@ async function main() {
   otherData.set("title", "Propiedad temporal de otro vendedor");
   otherData.set("description", "Registro temporal de otro vendedor.");
   otherData.set("propertyType", "Terreno");
+  otherData.set("contactPhone", "+543834000003");
   otherData.set("price", "2000");
   otherData.set("currency", "ARS");
   otherData.set("locationLabel", "Valle Viejo");

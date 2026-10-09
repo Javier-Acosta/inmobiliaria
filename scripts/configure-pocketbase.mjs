@@ -57,6 +57,7 @@ try {
       maxSelect: 1,
       values: ["Casa", "Departamento", "Terreno", "Local", "Quinta", "Duplex"],
     },
+    { name: "contactPhone", type: "text", required: false, max: 40 },
     { name: "price", type: "number", required: true, min: 0 },
     {
       name: "currency",
@@ -129,6 +130,7 @@ try {
     const missingFields = baseFields.filter(
       (field) =>
         (field.name === "propertyType" ||
+          field.name === "contactPhone" ||
           field.name === "created" ||
           field.name === "updated") &&
         !existingFieldNames.has(field.name),

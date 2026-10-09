@@ -7,6 +7,7 @@ export type PropertyListing = {
   title: string;
   description: string;
   propertyType: string;
+  contactPhone: string;
   price: number;
   currency: string;
   photos: string[];
@@ -24,6 +25,7 @@ export const demoProperties: PropertyListing[] = [
     description:
       "Casa familiar con patio, tres dormitorios y acceso rapido al centro catamarqueno.",
     propertyType: "Casa",
+    contactPhone: "+543834000001",
     price: 87000,
     currency: "USD",
     photos: [
@@ -41,6 +43,7 @@ export const demoProperties: PropertyListing[] = [
     description:
       "Terreno amplio, galeria cubierta y entorno tranquilo a pocos minutos de la capital.",
     propertyType: "Quinta",
+    contactPhone: "+543834000002",
     price: 145000,
     currency: "USD",
     photos: [
@@ -58,6 +61,7 @@ export const demoProperties: PropertyListing[] = [
     description:
       "Duplex moderno con cochera, dos dormitorios y salida rapida hacia Avenida Mexico.",
     propertyType: "Duplex",
+    contactPhone: "+543834000003",
     price: 76000,
     currency: "USD",
     photos: [
@@ -83,6 +87,7 @@ export function propertyFromRecord(record: RecordModel): PropertyListing {
     title: String(record.title ?? ""),
     description: String(record.description ?? ""),
     propertyType: String(record.propertyType ?? "Propiedad"),
+    contactPhone: String(record.contactPhone ?? ""),
     price: Number(record.price ?? 0),
     currency: String(record.currency ?? "USD"),
     photos,
