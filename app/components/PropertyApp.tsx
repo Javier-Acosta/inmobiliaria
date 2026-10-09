@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthModel } from "pocketbase";
 
@@ -596,6 +598,7 @@ function PropertyForm({
 
 export default function PropertyApp() {
   const pb = useMemo(() => getPocketBase(), []);
+  const router = useRouter();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<GoogleMap | null>(null);
   const [properties, setProperties] = useState<PropertyListing[]>([]);
@@ -818,7 +821,9 @@ export default function PropertyApp() {
           ribbon.textContent = "VENDIDO";
           element.appendChild(ribbon);
         }
-        element.addEventListener("click", () => setSelected(property));
+        element.addEventListener("click", () => {
+          router.push(`/propiedades/${property.id}`);
+        });
         overlay.getPanes()?.overlayMouseTarget?.appendChild(element);
       };
 
@@ -846,7 +851,7 @@ export default function PropertyApp() {
     return () => {
       overlays.forEach((overlay) => overlay.setMap(null));
     };
-  }, [visibleProperties, isMapReady]);
+  }, [visibleProperties, isMapReady, router]);
 
   async function loginWithGoogle() {
     setStatus("Abriendo login con Google...");
@@ -1209,12 +1214,11 @@ export default function PropertyApp() {
                   const position = mapPosition(property);
 
                   return (
-                    <button
+                    <Link
                       className="absolute z-10 w-[92px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border-2 border-white bg-white text-left shadow-lg transition hover:z-20 hover:scale-105 focus:z-20 focus:outline-none focus:ring-4 focus:ring-[#6e7d5b]/30"
+                      href={`/propiedades/${property.id}`}
                       key={`map-${property.id}`}
-                      onClick={() => setSelected(property)}
                       style={position}
-                      type="button"
                     >
                       <PropertyPhoto
                         className="block aspect-[4/3]"
@@ -1224,7 +1228,7 @@ export default function PropertyApp() {
                       <span className="block truncate px-2 py-1 text-xs font-semibold">
                         {formatPrice(property)}
                       </span>
-                    </button>
+                    </Link>
                   );
                 })
               : null}
@@ -1333,10 +1337,9 @@ export default function PropertyApp() {
                   className="overflow-hidden rounded-md border border-black/10 bg-white shadow-sm"
                   key={property.id}
                 >
-                  <button
+                  <Link
                     className="block w-full text-left"
-                    onClick={() => setSelected(property)}
-                    type="button"
+                    href={`/propiedades/${property.id}`}
                   >
                     <PropertyPhoto
                       className="aspect-[4/3]"
@@ -1368,7 +1371,7 @@ export default function PropertyApp() {
                         </span>
                       ) : null}
                     </div>
-                  </button>
+                  </Link>
                 </article>
               ))}
             </div>
