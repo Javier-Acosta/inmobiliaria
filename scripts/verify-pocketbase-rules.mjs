@@ -182,7 +182,8 @@ async function main() {
         otherSoldRejected,
         authorSoldSucceeded: sold.status === "sold",
         sellerListContainsOnlyOwnProperties:
-          authorList.length === 1 && authorList[0].author === author.user.id,
+          authorList.length === 2 &&
+          authorList.every((record) => record.author === author.user.id),
         otherDeleteRejected,
         authorDeleteSucceeded: true,
       },
