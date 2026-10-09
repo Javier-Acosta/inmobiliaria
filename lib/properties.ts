@@ -79,7 +79,7 @@ export function propertyFromRecord(record: RecordModel): PropertyListing {
     title: String(record.title ?? ""),
     description: String(record.description ?? ""),
     price: Number(record.price ?? 0),
-    currency: String(record.currency ?? "ARS"),
+    currency: String(record.currency ?? "USD"),
     photos,
     locationLabel: String(record.locationLabel ?? ""),
     latitude: Number(record.latitude ?? 0),

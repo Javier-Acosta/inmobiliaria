@@ -233,6 +233,13 @@ function mapPosition(property: PropertyListing) {
   };
 }
 
+function mergeWithDemoProperties(items: PropertyListing[]) {
+  const itemIds = new Set(items.map((property) => property.id));
+  const demos = demoProperties.filter((property) => !itemIds.has(property.id));
+
+  return [...items, ...demos];
+}
+
 function loadGoogleMaps() {
   if (!googleMapsApiKey) return Promise.resolve(null);
   if (window.google) return Promise.resolve(window.google);
@@ -318,16 +325,19 @@ function PropertyForm({
         </label>
         <label className="grid gap-1 text-sm font-medium">
           Moneda
-          <input
+          <select
             className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
             onChange={(event) =>
               setForm((current) => ({
                 ...current,
-                currency: event.target.value.toUpperCase(),
+                currency: event.target.value,
               }))
             }
             value={form.currency}
-          />
+          >
+            <option value="USD">Dolar</option>
+            <option value="ARS">Peso argentino</option>
+          </select>
         </label>
       </div>
       <label className="grid gap-1 text-sm font-medium">
@@ -454,7 +464,7 @@ export default function PropertyApp() {
         sort: "-created",
       });
       const items = records.map(propertyFromRecord);
-      setProperties(items.length || user ? items : demoProperties);
+      setProperties(mergeWithDemoProperties(items));
       setStatus("");
     } catch {
       setProperties(demoProperties);
@@ -918,7 +928,7 @@ export default function PropertyApp() {
               </h2>
                 <p className="text-sm text-black/60">
                   {isSellerSession
-                    ? "En sesion vendedor solo aparecen tus propiedades."
+                    ? "Tus publicaciones aparecen junto a propiedades de ejemplo."
                     : "Una vista rapida para comparar despues de explorar el mapa."}
                 </p>
               </div>
@@ -926,7 +936,7 @@ export default function PropertyApp() {
                 {isLoading
                   ? "Cargando..."
                   : isSellerSession
-                    ? `${filteredProperties.length} propias`
+                    ? `${filteredProperties.length} en vista`
                     : `${filteredProperties.length} publicadas`}
               </span>
             </div>

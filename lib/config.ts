@@ -9,8 +9,11 @@ export const pocketbaseUrl =
     ? configuredPocketbaseUrl.replace(/^http:/, "https:")
     : configuredPocketbaseUrl;
 
+const configuredDefaultCurrency =
+  process.env.NEXT_PUBLIC_DEFAULT_CURRENCY?.trim().toUpperCase();
+
 export const defaultCurrency =
-  process.env.NEXT_PUBLIC_DEFAULT_CURRENCY?.trim() || "ARS";
+  configuredDefaultCurrency === "ARS" ? "ARS" : "USD";
 
 export const googleMapsApiKey =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
