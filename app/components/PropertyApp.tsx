@@ -26,6 +26,8 @@ type FormState = {
   photos: File[];
 };
 
+type ListingView = "all" | "mine" | "demo";
+
 const emptyForm: FormState = {
   title: "",
   description: "",
@@ -240,6 +242,10 @@ function mergeWithDemoProperties(items: PropertyListing[]) {
   return [...items, ...demos];
 }
 
+function isDemoProperty(property: PropertyListing) {
+  return property.author === "demo";
+}
+
 function loadGoogleMaps() {
   if (!googleMapsApiKey) return Promise.resolve(null);
   if (window.google) return Promise.resolve(window.google);
@@ -433,14 +439,24 @@ export default function PropertyApp() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [search, setSearch] = useState("");
+  const [listingView, setListingView] = useState<ListingView>("all");
   const isSellerSession = Boolean(user);
+  const userId = user?.id;
 
-  const filteredProperties = useMemo(() => {
+  const visibleProperties = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const viewItems = properties.filter((property) => {
+      if (listingView === "demo") return isDemoProperty(property);
+      if (listingView === "mine") {
+        return Boolean(userId) && property.author === userId;
+      }
 
-    if (!query) return properties;
+      return true;
+    });
 
-    return properties.filter((property) =>
+    if (!query) return viewItems;
+
+    return viewItems.filter((property) =>
       [
         property.title,
         property.description,
@@ -451,13 +467,26 @@ export default function PropertyApp() {
         .toLowerCase()
         .includes(query),
     );
-  }, [properties, search]);
+  }, [listingView, properties, search, userId]);
+
+  const ownPropertiesCount = useMemo(
+    () =>
+      userId
+        ? properties.filter((property) => property.author === userId).length
+        : 0,
+    [properties, userId],
+  );
+
+  const demoPropertiesCount = useMemo(
+    () => properties.filter(isDemoProperty).length,
+    [properties],
+  );
 
   const loadProperties = useCallback(async () => {
     setIsLoading(true);
     try {
-      const filter = user?.id
-        ? pb.filter("author = {:author}", { author: user.id })
+      const filter = userId
+        ? pb.filter("author = {:author}", { author: userId })
         : 'status = "published" || status = "sold"';
       const records = await pb.collection("properties").getFullList({
         filter,
@@ -474,13 +503,17 @@ export default function PropertyApp() {
     } finally {
       setIsLoading(false);
     }
-  }, [pb, user]);
+  }, [pb, userId]);
 
   useEffect(() => {
     void Promise.resolve().then(loadProperties);
 
     return pb.authStore.onChange(() => {
-      setUser(pb.authStore.model);
+      const nextUser = pb.authStore.model;
+      setUser(nextUser);
+      if (!nextUser) {
+        setListingView("all");
+      }
     });
   }, [loadProperties, pb]);
 
@@ -543,7 +576,7 @@ export default function PropertyApp() {
     if (!isMapReady || !mapRef.current || !window.google) return;
 
     const google = window.google;
-    const overlays = filteredProperties.map((property) => {
+    const overlays = visibleProperties.map((property) => {
       const overlay = new google.maps.OverlayView();
       let element: HTMLButtonElement | null = null;
 
@@ -603,7 +636,7 @@ export default function PropertyApp() {
     return () => {
       overlays.forEach((overlay) => overlay.setMap(null));
     };
-  }, [filteredProperties, isMapReady]);
+  }, [visibleProperties, isMapReady]);
 
   async function loginWithGoogle() {
     setStatus("Abriendo login con Google...");
@@ -622,6 +655,7 @@ export default function PropertyApp() {
     pb.authStore.clear();
     setUser(null);
     setForm(emptyForm);
+    setListingView("all");
     setStatus("Sesion cerrada.");
   }
 
@@ -848,7 +882,7 @@ export default function PropertyApp() {
               />
             )}
             {!googleMapsApiKey
-              ? filteredProperties.map((property) => {
+              ? visibleProperties.map((property) => {
                   const position = mapPosition(property);
 
                   return (
@@ -880,9 +914,9 @@ export default function PropertyApp() {
                 })
               : null}
 
-            {!isLoading && filteredProperties.length === 0 ? (
+            {!isLoading && visibleProperties.length === 0 ? (
               <div className="absolute bottom-4 left-4 right-4 rounded-md bg-white/95 p-4 text-sm text-black/60 shadow-sm md:left-auto md:w-[320px]">
-                No hay propiedades para esa busqueda. Proba con otra zona.
+                No hay propiedades para esta vista. Proba con otro filtro o busqueda.
               </div>
             ) : null}
           </div>
@@ -921,28 +955,65 @@ export default function PropertyApp() {
         ) : null}
 
         <section className="grid gap-5">
-            <div className="flex items-end justify-between gap-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
               <h2 className="text-2xl font-semibold">
-                {isSellerSession ? "Mis publicaciones" : "Propiedades destacadas"}
+                Publicaciones
               </h2>
                 <p className="text-sm text-black/60">
                   {isSellerSession
-                    ? "Tus publicaciones aparecen junto a propiedades de ejemplo."
+                    ? "Separa tus propiedades reales de los ejemplos cuando quieras revisar tu trabajo."
                     : "Una vista rapida para comparar despues de explorar el mapa."}
                 </p>
               </div>
-              <span className="text-sm text-black/50">
-                {isLoading
-                  ? "Cargando..."
-                  : isSellerSession
-                    ? `${filteredProperties.length} en vista`
-                    : `${filteredProperties.length} publicadas`}
-              </span>
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                <div className="inline-flex rounded-md border border-black/10 bg-white p-1 text-sm shadow-sm">
+                  {[
+                    {
+                      label: `Todas (${properties.length})`,
+                      value: "all" as const,
+                    },
+                    ...(isSellerSession
+                      ? [
+                          {
+                            label: `Mis publicaciones (${ownPropertiesCount})`,
+                            value: "mine" as const,
+                          },
+                        ]
+                      : []),
+                    {
+                      label: `Ejemplos (${demoPropertiesCount})`,
+                      value: "demo" as const,
+                    },
+                  ].map((option) => (
+                    <button
+                      className={`rounded px-3 py-2 font-medium transition ${
+                        listingView === option.value
+                          ? "bg-black text-white"
+                          : "text-black/60 hover:bg-black/5 hover:text-black"
+                      }`}
+                      key={option.value}
+                      onClick={() => setListingView(option.value)}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-sm text-black/50">
+                  {isLoading
+                    ? "Cargando..."
+                    : listingView === "mine"
+                      ? `${visibleProperties.length} propias`
+                      : listingView === "demo"
+                        ? `${visibleProperties.length} ejemplos`
+                        : `${visibleProperties.length} en vista`}
+                </span>
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredProperties.map((property) => (
+              {visibleProperties.map((property) => (
                 <article
                   className="overflow-hidden rounded-md border border-black/10 bg-white shadow-sm"
                   key={property.id}
@@ -976,6 +1047,11 @@ export default function PropertyApp() {
                       <p className="text-sm text-[#6e7d5b]">
                         {property.locationLabel}
                       </p>
+                      {isDemoProperty(property) ? (
+                        <span className="w-fit rounded-full bg-[#f7f5f0] px-2 py-1 text-xs font-medium text-black/50">
+                          Ejemplo
+                        </span>
+                      ) : null}
                     </div>
                   </button>
                 </article>
