@@ -29,6 +29,7 @@ type FormState = {
 };
 
 type ListingView = "all" | "mine" | "demo";
+type StatusFilter = "all" | PropertyListing["status"];
 
 const emptyForm: FormState = {
   title: "",
@@ -510,11 +511,17 @@ export default function PropertyApp() {
   const [isMapReady, setIsMapReady] = useState(false);
   const [search, setSearch] = useState("");
   const [listingView, setListingView] = useState<ListingView>("all");
+  const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const isSellerSession = Boolean(user);
   const userId = user?.id;
 
   const visibleProperties = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const min = minPrice ? Number(minPrice) : null;
+    const max = maxPrice ? Number(maxPrice) : null;
     const viewItems = properties.filter((property) => {
       if (listingView === "demo") return isDemoProperty(property);
       if (listingView === "mine") {
@@ -524,9 +531,32 @@ export default function PropertyApp() {
       return true;
     });
 
-    if (!query) return viewItems;
+    const filteredItems = viewItems.filter((property) => {
+      if (
+        propertyTypeFilter !== "all" &&
+        property.propertyType !== propertyTypeFilter
+      ) {
+        return false;
+      }
 
-    return viewItems.filter((property) =>
+      if (statusFilter !== "all" && property.status !== statusFilter) {
+        return false;
+      }
+
+      if (min !== null && Number.isFinite(min) && property.price < min) {
+        return false;
+      }
+
+      if (max !== null && Number.isFinite(max) && property.price > max) {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (!query) return filteredItems;
+
+    return filteredItems.filter((property) =>
       [
         property.title,
         property.description,
@@ -539,7 +569,16 @@ export default function PropertyApp() {
         .toLowerCase()
         .includes(query),
     );
-  }, [listingView, properties, search, userId]);
+  }, [
+    listingView,
+    maxPrice,
+    minPrice,
+    properties,
+    propertyTypeFilter,
+    search,
+    statusFilter,
+    userId,
+  ]);
 
   const ownPropertiesCount = useMemo(
     () =>
@@ -738,6 +777,14 @@ export default function PropertyApp() {
     setForm(emptyForm);
     setIsEditorOpen(true);
     setStatus("Completa los datos de la nueva propiedad.");
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setPropertyTypeFilter("all");
+    setStatusFilter("all");
+    setMinPrice("");
+    setMaxPrice("");
   }
 
   function editProperty(property: PropertyListing) {
@@ -950,7 +997,7 @@ export default function PropertyApp() {
         ) : null}
 
         <section className="grid gap-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-5">
             <div>
               <h2 className="text-2xl font-semibold">
                 Mapa de propiedades en Gran Catamarca
@@ -960,15 +1007,80 @@ export default function PropertyApp() {
                 La Carrera o la zona exacta, y toca una foto para abrir la ficha.
               </p>
             </div>
-            <label className="w-full max-w-sm text-sm font-medium md:text-right">
-              Buscar zona
-              <input
-                className="mt-2 w-full rounded-md border border-black/15 bg-white px-3 py-2 text-left font-normal outline-none focus:border-black"
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Ej: centro, norte, Valle Viejo"
-                value={search}
-              />
-            </label>
+            <div className="grid gap-3 rounded-md border border-black/10 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_auto]">
+              <label className="grid gap-1 text-sm font-medium">
+                Buscar zona
+                <input
+                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Ej: centro, norte, Valle Viejo"
+                  value={search}
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Tipo
+                <select
+                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                  onChange={(event) => setPropertyTypeFilter(event.target.value)}
+                  value={propertyTypeFilter}
+                >
+                  <option value="all">Todos</option>
+                  {propertyTypeOptions.map((propertyType) => (
+                    <option key={propertyType} value={propertyType}>
+                      {propertyType}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Estado
+                <select
+                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value as StatusFilter)
+                  }
+                  value={statusFilter}
+                >
+                  <option value="all">Todos</option>
+                  <option value="published">Disponibles</option>
+                  <option value="sold">Vendidas</option>
+                  {isSellerSession ? <option value="draft">Borradores</option> : null}
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="grid gap-1 text-sm font-medium">
+                  Min
+                  <input
+                    className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                    inputMode="decimal"
+                    min="0"
+                    onChange={(event) => setMinPrice(event.target.value)}
+                    type="number"
+                    value={minPrice}
+                  />
+                </label>
+                <label className="grid gap-1 text-sm font-medium">
+                  Max
+                  <input
+                    className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                    inputMode="decimal"
+                    min="0"
+                    onChange={(event) => setMaxPrice(event.target.value)}
+                    type="number"
+                    value={maxPrice}
+                  />
+                </label>
+              </div>
+              <div className="flex items-end">
+                <button
+                  className="w-full rounded-md border border-black/10 px-4 py-2 text-sm font-medium text-black/70 transition hover:bg-black/5"
+                  onClick={clearFilters}
+                  type="button"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="relative min-h-[560px] overflow-hidden rounded-md border border-black/10 bg-[#d9ded0] shadow-sm">
