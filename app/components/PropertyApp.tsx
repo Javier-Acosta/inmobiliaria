@@ -57,6 +57,8 @@ const propertyTypeOptions = [
   "Duplex",
 ];
 
+const defaultPropertyType = propertyTypeOptions[0];
+
 function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
@@ -326,6 +328,14 @@ function displayContactPhone(phone: string) {
   return localPhoneInput(phone) || phone;
 }
 
+function editablePropertyType(propertyType: string) {
+  if (propertyTypeOptions.includes(propertyType)) {
+    return propertyType;
+  }
+
+  return defaultPropertyType;
+}
+
 function whatsappDigits(phone: string) {
   const digits = phoneDigits(phone);
 
@@ -394,6 +404,11 @@ function PropertyForm({
 }) {
   return (
     <form className="grid gap-4" onSubmit={submitProperty}>
+      {status ? (
+        <p className="rounded-md border border-black/10 bg-[#f7f5f0] px-3 py-2 text-sm font-normal leading-6 text-black/70">
+          {status}
+        </p>
+      ) : null}
       <label className="grid gap-1 text-sm font-medium">
         Titulo
         <input
@@ -568,11 +583,6 @@ function PropertyForm({
           Acepta JPG/JPEG, PNG o WEBP. Las fotos se optimizan antes de publicar.
         </span>
       </label>
-      {status ? (
-        <p className="rounded-md border border-black/10 bg-[#f7f5f0] px-3 py-2 text-sm font-normal leading-6 text-black/70">
-          {status}
-        </p>
-      ) : null}
       <button
         className="rounded-md bg-[#6e7d5b] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-black/30"
         disabled={!user || isSaving}
@@ -894,7 +904,7 @@ export default function PropertyApp() {
       id: property.id,
       title: property.title,
       description: property.description,
-      propertyType: property.propertyType,
+      propertyType: editablePropertyType(property.propertyType),
       contactPhone: localPhoneInput(property.contactPhone),
       price: String(property.price),
       currency: property.currency,
@@ -905,6 +915,7 @@ export default function PropertyApp() {
       status: property.status,
     });
     setIsEditorOpen(true);
+    setStatus("Revisa los datos y guarda los cambios.");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
