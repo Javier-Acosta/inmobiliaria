@@ -313,11 +313,12 @@ function PropertyForm({
           value={form.description}
         />
       </label>
-      <div className="grid grid-cols-[1fr_92px] gap-3">
+      <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
         <label className="grid gap-1 text-sm font-medium">
           Precio
           <input
             className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
+            inputMode="decimal"
             min="0"
             onChange={(event) =>
               setForm((current) => ({
@@ -325,26 +326,38 @@ function PropertyForm({
                 price: event.target.value,
               }))
             }
+            step="1"
             type="number"
             value={form.price}
           />
         </label>
-        <label className="grid gap-1 text-sm font-medium">
+        <div className="grid gap-1 text-sm font-medium">
           Moneda
-          <select
-            className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                currency: event.target.value,
-              }))
-            }
-            value={form.currency}
-          >
-            <option value="USD">Dolar</option>
-            <option value="ARS">Peso argentino</option>
-          </select>
-        </label>
+          <div className="grid grid-cols-2 rounded-md border border-black/15 bg-white p-1 font-normal">
+            {[
+              { label: "USD", value: "USD" },
+              { label: "ARS", value: "ARS" },
+            ].map((option) => (
+              <button
+                className={`rounded px-3 py-2 text-sm font-semibold transition ${
+                  form.currency === option.value
+                    ? "bg-black text-white"
+                    : "text-black/60 hover:bg-black/5 hover:text-black"
+                }`}
+                key={option.value}
+                onClick={() =>
+                  setForm((current) => ({
+                    ...current,
+                    currency: option.value,
+                  }))
+                }
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <label className="grid gap-1 text-sm font-medium">
         Direccion o zona
@@ -699,12 +712,18 @@ export default function PropertyApp() {
     if (
       !form.title.trim() ||
       !form.description.trim() ||
-      !form.price ||
       !form.locationLabel.trim() ||
       !form.latitude ||
       !form.longitude
     ) {
       setStatus("Completa titulo, descripcion, precio y ubicacion.");
+      return;
+    }
+
+    const price = Number(form.price);
+
+    if (!Number.isFinite(price) || price <= 0) {
+      setStatus("Ingresa un precio mayor a cero.");
       return;
     }
 
@@ -715,7 +734,7 @@ export default function PropertyApp() {
       const payload = new FormData();
       payload.set("title", form.title.trim());
       payload.set("description", form.description.trim());
-      payload.set("price", form.price);
+      payload.set("price", String(price));
       payload.set("currency", form.currency || defaultCurrency);
       payload.set("locationLabel", form.locationLabel.trim());
       payload.set("latitude", form.latitude);
