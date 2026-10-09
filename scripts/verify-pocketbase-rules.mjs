@@ -110,7 +110,6 @@ async function main() {
   secondData.set("longitude", "-65.7757");
   secondData.set("author", author.user.id);
   secondData.set("status", "published");
-  secondData.append("photos", tinyPngFile());
 
   const secondProperty = await author.pb.collection("properties").create(secondData);
   createdIds.properties.push(secondProperty.id);

@@ -30,7 +30,7 @@ Crear una coleccion base llamada `properties` con estos campos:
 | `contactPhone` | text | no | Telefono o WhatsApp visible para consultas. |
 | `price` | number | si | Precio publicado. |
 | `currency` | select | si | Valor inicial recomendado: `USD`. |
-| `photos` | file | si | Multiple, solo imagenes. |
+| `photos` | file | no | Multiple, solo imagenes. Si no hay foto, la app muestra un placeholder. |
 | `locationLabel` | text | si | Direccion, barrio o zona legible. |
 | `latitude` | number | si | Coordenada para Google Maps. |
 | `longitude` | number | si | Coordenada para Google Maps. |

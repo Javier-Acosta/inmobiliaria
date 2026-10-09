@@ -69,7 +69,7 @@ try {
     {
       name: "photos",
       type: "file",
-      required: true,
+      required: false,
       maxSelect: 8,
       maxSize: 5242880,
       mimeTypes: ["image/jpeg", "image/png", "image/webp"],
@@ -158,10 +158,15 @@ try {
       !["Casa", "Departamento", "Terreno", "Local", "Quinta", "Duplex"].every(
         (value) => propertyTypeField.values?.includes(value),
       );
+    const photosField = updated.fields.find((field) => field.name === "photos");
+    const needsPhotosUpdate = photosField?.type === "file" && photosField.required;
     const needsRuleUpdate =
       updated.listRule !== sellerListRule || updated.viewRule !== sellerListRule;
     const finalCollection =
-      needsSoldStatus || needsPropertyTypeUpdate || needsRuleUpdate
+      needsSoldStatus ||
+      needsPropertyTypeUpdate ||
+      needsPhotosUpdate ||
+      needsRuleUpdate
         ? await pb.collections.update(updated.id, {
             listRule: sellerListRule,
             viewRule: sellerListRule,
@@ -180,6 +185,8 @@ try {
                         "Duplex",
                       ],
                     }
+                  : field.name === "photos"
+                    ? { ...field, required: false }
                 : field,
             ),
             indexes: [
@@ -196,6 +203,7 @@ try {
             missingFields.length > 0 ||
             needsSoldStatus ||
             needsPropertyTypeUpdate ||
+            needsPhotosUpdate ||
             needsRuleUpdate
               ? "updated"
               : "exists",

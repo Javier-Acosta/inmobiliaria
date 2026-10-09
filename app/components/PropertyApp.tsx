@@ -168,6 +168,41 @@ function SoldRibbon() {
   );
 }
 
+function PropertyPhoto({
+  className = "",
+  property,
+  sizes,
+}: {
+  className?: string;
+  property: PropertyListing;
+  sizes: string;
+}) {
+  return (
+    <div className={`relative overflow-hidden bg-[#e8e2d8] ${className}`}>
+      {property.status === "sold" ? <SoldRibbon /> : null}
+      {property.photos[0] ? (
+        <Image
+          alt={property.title}
+          className="object-cover"
+          fill
+          sizes={sizes}
+          src={property.photos[0]}
+          unoptimized={property.photos[0].startsWith("http")}
+        />
+      ) : (
+        <div className="grid h-full place-items-center px-4 text-center">
+          <div>
+            <p className="text-sm font-semibold text-black/55">
+              {property.propertyType}
+            </p>
+            <p className="mt-1 text-xs text-black/45">Sin foto cargada</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const fallbackBounds = {
   north: -28.27,
   south: -28.67,
@@ -702,6 +737,10 @@ export default function PropertyApp() {
           image.className = "h-full w-full object-cover";
           image.src = property.photos[0];
           photo.appendChild(image);
+        } else {
+          photo.className =
+            "grid h-[72px] place-items-center bg-[#e8e2d8] px-2 text-center text-[10px] font-semibold text-black/45";
+          photo.textContent = property.propertyType;
         }
 
         const price = document.createElement("span");
@@ -1107,19 +1146,11 @@ export default function PropertyApp() {
                       style={position}
                       type="button"
                     >
-                      <span className="relative block aspect-[4/3] bg-[#e8e2d8]">
-                        {property.status === "sold" ? <SoldRibbon /> : null}
-                        {property.photos[0] ? (
-                          <Image
-                            alt={property.title}
-                            className="object-cover"
-                            fill
-                            sizes="92px"
-                            src={property.photos[0]}
-                            unoptimized={property.photos[0].startsWith("http")}
-                          />
-                        ) : null}
-                      </span>
+                      <PropertyPhoto
+                        className="block aspect-[4/3]"
+                        property={property}
+                        sizes="92px"
+                      />
                       <span className="block truncate px-2 py-1 text-xs font-semibold">
                         {formatPrice(property)}
                       </span>
@@ -1237,19 +1268,11 @@ export default function PropertyApp() {
                     onClick={() => setSelected(property)}
                     type="button"
                   >
-                    <div className="relative aspect-[4/3] bg-[#e8e2d8]">
-                      {property.status === "sold" ? <SoldRibbon /> : null}
-                      {property.photos[0] ? (
-                        <Image
-                          alt={property.title}
-                          className="object-cover"
-                          fill
-                          sizes="(min-width: 1280px) 280px, (min-width: 768px) 50vw, 100vw"
-                          src={property.photos[0]}
-                          unoptimized={property.photos[0].startsWith("http")}
-                        />
-                      ) : null}
-                    </div>
+                    <PropertyPhoto
+                      className="aspect-[4/3]"
+                      property={property}
+                      sizes="(min-width: 1280px) 280px, (min-width: 768px) 50vw, 100vw"
+                    />
                     <div className="grid gap-2 p-4">
                       <p className="text-lg font-semibold">
                         {formatPrice(property)}
@@ -1359,19 +1382,11 @@ export default function PropertyApp() {
             </div>
             <div className="grid gap-5 lg:grid-cols-[1fr_420px]">
               <div className="grid gap-4">
-                <div className="relative aspect-[16/9] overflow-hidden rounded-md bg-[#e8e2d8]">
-                  {selected.status === "sold" ? <SoldRibbon /> : null}
-                  {selected.photos[0] ? (
-                    <Image
-                      alt={selected.title}
-                      className="object-cover"
-                      fill
-                      sizes="(min-width: 1024px) 60vw, 100vw"
-                      src={selected.photos[0]}
-                      unoptimized={selected.photos[0].startsWith("http")}
-                    />
-                  ) : null}
-                </div>
+                <PropertyPhoto
+                  className="aspect-[16/9] rounded-md"
+                  property={selected}
+                  sizes="(min-width: 1024px) 60vw, 100vw"
+                />
                 <p className="leading-7 text-black/70">{selected.description}</p>
               </div>
               <div className="overflow-hidden rounded-md border border-black/10 bg-[#f7f5f0]">
