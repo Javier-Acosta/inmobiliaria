@@ -699,6 +699,18 @@ export default function PropertyApp() {
     setStatus("Sesion cerrada.");
   }
 
+  function startNewProperty() {
+    if (!user) {
+      setStatus("Inicia sesion con Google para publicar.");
+      return;
+    }
+
+    setSelected(null);
+    setForm(emptyForm);
+    setIsEditorOpen(true);
+    setStatus("Completa los datos de la nueva propiedad.");
+  }
+
   function editProperty(property: PropertyListing) {
     if (!user) {
       setStatus("Inicia sesion con Google para editar publicaciones.");
@@ -870,6 +882,13 @@ export default function PropertyApp() {
                 <span className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm">
                   {modelName(user)}
                 </span>
+                <button
+                  className="rounded-full bg-[#6e7d5b] px-5 py-2 text-sm font-medium text-white"
+                  onClick={startNewProperty}
+                  type="button"
+                >
+                  Nueva publicacion
+                </button>
                 <button
                   className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white"
                   onClick={logout}

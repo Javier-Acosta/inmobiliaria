@@ -96,6 +96,22 @@ async function main() {
   const property = await author.pb.collection("properties").create(data);
   createdIds.properties.push(property.id);
 
+  const secondData = new FormData();
+  secondData.set("title", "Segunda propiedad temporal del mismo vendedor");
+  secondData.set("description", "Registro temporal para verificar multiples publicaciones.");
+  secondData.set("propertyType", "Departamento");
+  secondData.set("price", "1500");
+  secondData.set("currency", "USD");
+  secondData.set("locationLabel", "Zona norte");
+  secondData.set("latitude", "-28.4482");
+  secondData.set("longitude", "-65.7757");
+  secondData.set("author", author.user.id);
+  secondData.set("status", "published");
+  secondData.append("photos", tinyPngFile());
+
+  const secondProperty = await author.pb.collection("properties").create(secondData);
+  createdIds.properties.push(secondProperty.id);
+
   const otherData = new FormData();
   otherData.set("title", "Propiedad temporal de otro vendedor");
   otherData.set("description", "Registro temporal de otro vendedor.");
@@ -150,6 +166,8 @@ async function main() {
 
   await author.pb.collection("properties").delete(property.id);
   createdIds.properties = createdIds.properties.filter((id) => id !== property.id);
+  await author.pb.collection("properties").delete(secondProperty.id);
+  createdIds.properties = createdIds.properties.filter((id) => id !== secondProperty.id);
   await other.pb.collection("properties").delete(otherProperty.id);
   createdIds.properties = createdIds.properties.filter((id) => id !== otherProperty.id);
 
@@ -158,6 +176,7 @@ async function main() {
       {
         anonymousCreateRejected,
         authorCreateSucceeded: Boolean(property.id),
+        sameAuthorSecondCreateSucceeded: Boolean(secondProperty.id),
         otherUpdateRejected,
         authorUpdateSucceeded: updated.title === "Propiedad temporal editada",
         otherSoldRejected,
