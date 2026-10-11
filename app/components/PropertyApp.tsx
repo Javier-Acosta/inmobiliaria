@@ -371,6 +371,25 @@ function whatsappUrl(property: PropertyListing) {
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.left = "-9999px";
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
 function loadGoogleMaps() {
   if (!googleMapsApiKey) return Promise.resolve(null);
   if (window.google) return Promise.resolve(window.google);
@@ -1268,6 +1287,34 @@ export default function PropertyApp() {
     }
   }
 
+  async function shareProperty(property: PropertyListing) {
+    if (typeof window === "undefined") return;
+
+    const url = `${window.location.origin}/propiedades/${property.id}`;
+    const text = `${property.title} - ${formatPrice(property)}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: property.title,
+          text,
+          url,
+        });
+        setStatus("Link compartido.");
+        return;
+      }
+
+      await copyTextToClipboard(url);
+      setStatus("Link copiado para compartir.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      setStatus("No se pudo compartir el link.");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f7f5f0] text-[#171717]">
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-10 px-5 py-8 sm:px-8 lg:px-10">
@@ -1664,6 +1711,13 @@ export default function PropertyApp() {
                         </Link>
                         <button
                           className="rounded-md border border-black/10 px-3 py-2 text-sm"
+                          onClick={() => shareProperty(property)}
+                          type="button"
+                        >
+                          Compartir
+                        </button>
+                        <button
+                          className="rounded-md border border-black/10 px-3 py-2 text-sm"
                           onClick={() => editProperty(property)}
                           type="button"
                         >
@@ -1797,6 +1851,15 @@ export default function PropertyApp() {
                       ) : null}
                     </div>
                   </Link>
+                  <div className="border-t border-black/10 p-4 pt-3">
+                    <button
+                      className="w-full rounded-md border border-black/10 px-3 py-2 text-sm font-semibold transition hover:bg-black hover:text-white"
+                      onClick={() => shareProperty(property)}
+                      type="button"
+                    >
+                      Compartir
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -1843,6 +1906,13 @@ export default function PropertyApp() {
                     </a>
                   </>
                 ) : null}
+                <button
+                  className="rounded-full border border-black/10 px-4 py-2 text-sm"
+                  onClick={() => shareProperty(selected)}
+                  type="button"
+                >
+                  Compartir
+                </button>
                 {user && selected.author === user.id ? (
                   <>
                     <button

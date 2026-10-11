@@ -57,6 +57,25 @@ function googleMapsUrl(property: PropertyListing) {
   return `https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`;
 }
 
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.left = "-9999px";
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
 function SoldRibbon() {
   return (
     <span className="absolute right-[-36px] top-5 z-10 rotate-45 bg-red-700 px-12 py-1 text-xs font-bold tracking-[0.16em] text-white shadow-md">
@@ -121,9 +140,13 @@ export default function PropertyDetailPage({ id }: { id: string }) {
         return;
       }
 
-      await navigator.clipboard.writeText(url);
+      await copyTextToClipboard(url);
       setShareStatus("Link copiado.");
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
       setShareStatus("No se pudo compartir el link.");
     }
   }
