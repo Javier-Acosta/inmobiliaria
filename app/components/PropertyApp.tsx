@@ -408,6 +408,47 @@ function PropertyForm({
   submitProperty: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   user: AuthModel;
 }) {
+  const photoPreviews = useMemo(
+    () =>
+      form.photos.map((file) => ({
+        file,
+        url: URL.createObjectURL(file),
+      })),
+    [form.photos],
+  );
+
+  useEffect(() => {
+    return () => {
+      photoPreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [photoPreviews]);
+
+  function removePhoto(index: number) {
+    setForm((current) => ({
+      ...current,
+      photos: current.photos.filter((_, photoIndex) => photoIndex !== index),
+    }));
+  }
+
+  function movePhoto(index: number, direction: -1 | 1) {
+    setForm((current) => {
+      const targetIndex = index + direction;
+
+      if (targetIndex < 0 || targetIndex >= current.photos.length) {
+        return current;
+      }
+
+      const photos = [...current.photos];
+      const [photo] = photos.splice(index, 1);
+      photos.splice(targetIndex, 0, photo);
+
+      return {
+        ...current,
+        photos,
+      };
+    });
+  }
+
   return (
     <form className="grid gap-4" onSubmit={submitProperty}>
       {status ? (
@@ -589,6 +630,86 @@ function PropertyForm({
           Acepta JPG/JPEG, PNG o WEBP. Las fotos se optimizan antes de publicar.
         </span>
       </label>
+
+      {photoPreviews.length > 0 ? (
+        <div className="grid gap-3 rounded-md border border-black/10 bg-[#f7f5f0] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">
+              {photoPreviews.length} foto
+              {photoPreviews.length === 1 ? "" : "s"} seleccionada
+              {photoPreviews.length === 1 ? "" : "s"}
+            </p>
+            <button
+              className="rounded-md border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold"
+              disabled={isSaving}
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  photos: [],
+                }))
+              }
+              type="button"
+            >
+              Quitar todas
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {photoPreviews.map((preview, index) => (
+              <div
+                className="overflow-hidden rounded-md border border-black/10 bg-white"
+                key={`${preview.file.name}-${preview.file.lastModified}-${index}`}
+              >
+                <div className="relative aspect-[4/3] bg-[#e8e2d8]">
+                  <Image
+                    alt={`Vista previa ${index + 1}`}
+                    className="object-cover"
+                    fill
+                    sizes="180px"
+                    src={preview.url}
+                    unoptimized
+                  />
+                  {index === 0 ? (
+                    <span className="absolute left-2 top-2 rounded-full bg-black px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-white">
+                      Portada
+                    </span>
+                  ) : null}
+                </div>
+                <div className="grid gap-2 p-2">
+                  <p className="truncate text-xs text-black/60">
+                    {preview.file.name}
+                  </p>
+                  <div className="grid grid-cols-3 gap-1">
+                    <button
+                      className="rounded border border-black/10 px-2 py-1 text-xs disabled:opacity-40"
+                      disabled={isSaving || index === 0}
+                      onClick={() => movePhoto(index, -1)}
+                      type="button"
+                    >
+                      Subir
+                    </button>
+                    <button
+                      className="rounded border border-black/10 px-2 py-1 text-xs disabled:opacity-40"
+                      disabled={isSaving || index === photoPreviews.length - 1}
+                      onClick={() => movePhoto(index, 1)}
+                      type="button"
+                    >
+                      Bajar
+                    </button>
+                    <button
+                      className="rounded border border-red-700/20 px-2 py-1 text-xs text-red-700"
+                      disabled={isSaving}
+                      onClick={() => removePhoto(index)}
+                      type="button"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <button
         className="rounded-md bg-[#6e7d5b] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-black/30"
         disabled={!user || isSaving}
@@ -988,8 +1109,20 @@ export default function PropertyApp() {
 
     try {
       setIsSaving(true);
-      setStatus("Optimizando fotos...");
-      const optimizedPhotos = await Promise.all(form.photos.map(compressPhoto));
+      const optimizedPhotos: File[] = [];
+
+      for (const [index, photo] of form.photos.entries()) {
+        setStatus(
+          `Optimizando foto ${index + 1} de ${form.photos.length}...`,
+        );
+        optimizedPhotos.push(await compressPhoto(photo));
+      }
+
+      setStatus(
+        optimizedPhotos.length > 0
+          ? "Subiendo publicacion y fotos..."
+          : "Guardando publicacion...",
+      );
       const payload = new FormData();
       payload.set("title", form.title.trim());
       payload.set("description", form.description.trim());
