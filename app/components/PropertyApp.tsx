@@ -36,6 +36,8 @@ type FormState = {
 
 type ListingView = "all" | "mine" | "demo";
 type StatusFilter = "all" | PropertyListing["status"];
+type CurrencyFilter = "all" | "ARS" | "USD";
+type SortOption = "recent" | "price-asc" | "price-desc";
 
 const emptyForm: FormState = {
   title: "",
@@ -739,6 +741,8 @@ export default function PropertyApp() {
   const [listingView, setListingView] = useState<ListingView>("all");
   const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [currencyFilter, setCurrencyFilter] = useState<CurrencyFilter>("all");
+  const [sortOption, setSortOption] = useState<SortOption>("recent");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const isSellerSession = Boolean(user);
@@ -769,6 +773,10 @@ export default function PropertyApp() {
         return false;
       }
 
+      if (currencyFilter !== "all" && property.currency !== currencyFilter) {
+        return false;
+      }
+
       if (min !== null && Number.isFinite(min) && property.price < min) {
         return false;
       }
@@ -780,30 +788,79 @@ export default function PropertyApp() {
       return true;
     });
 
-    if (!query) return filteredItems;
+    const searchedItems = query
+      ? filteredItems.filter((property) =>
+          [
+            property.title,
+            property.description,
+            property.propertyType,
+            property.contactPhone,
+            property.locationLabel,
+            formatPrice(property),
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(query),
+        )
+      : filteredItems;
 
-    return filteredItems.filter((property) =>
-      [
-        property.title,
-        property.description,
-        property.propertyType,
-        property.contactPhone,
-        property.locationLabel,
-        formatPrice(property),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
+    return [...searchedItems].sort((first, second) => {
+      if (sortOption === "price-asc") return first.price - second.price;
+      if (sortOption === "price-desc") return second.price - first.price;
+      return 0;
+    });
   }, [
+    currencyFilter,
     listingView,
     maxPrice,
     minPrice,
     properties,
     propertyTypeFilter,
     search,
+    sortOption,
     statusFilter,
     userId,
+  ]);
+
+  const activeFilters = useMemo(() => {
+    const filters: { key: string; label: string }[] = [];
+
+    if (search.trim()) filters.push({ key: "search", label: search.trim() });
+    if (propertyTypeFilter !== "all") {
+      filters.push({ key: "type", label: propertyTypeFilter });
+    }
+    if (statusFilter !== "all") {
+      filters.push({
+        key: "status",
+        label:
+          statusFilter === "published"
+            ? "Disponibles"
+            : statusFilter === "sold"
+              ? "Vendidas"
+              : "Borradores",
+      });
+    }
+    if (currencyFilter !== "all") {
+      filters.push({ key: "currency", label: currencyFilter });
+    }
+    if (minPrice) filters.push({ key: "min", label: `Desde ${minPrice}` });
+    if (maxPrice) filters.push({ key: "max", label: `Hasta ${maxPrice}` });
+    if (sortOption === "price-asc") {
+      filters.push({ key: "sort", label: "Menor precio" });
+    }
+    if (sortOption === "price-desc") {
+      filters.push({ key: "sort", label: "Mayor precio" });
+    }
+
+    return filters;
+  }, [
+    currencyFilter,
+    maxPrice,
+    minPrice,
+    propertyTypeFilter,
+    search,
+    sortOption,
+    statusFilter,
   ]);
 
   const ownPropertiesCount = useMemo(
@@ -1035,6 +1092,8 @@ export default function PropertyApp() {
     setSearch("");
     setPropertyTypeFilter("all");
     setStatusFilter("all");
+    setCurrencyFilter("all");
+    setSortOption("recent");
     setMinPrice("");
     setMaxPrice("");
   }
@@ -1295,13 +1354,49 @@ export default function PropertyApp() {
                 La Carrera o la zona exacta, y toca una foto para abrir la ficha.
               </p>
             </div>
-            <div className="grid gap-3 rounded-md border border-black/10 bg-white p-4 shadow-sm lg:grid-cols-[1.4fr_1fr_1fr_1fr_auto]">
+            <div className="grid gap-4 rounded-md border border-black/10 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold">
+                    {isLoading
+                      ? "Buscando propiedades..."
+                      : `${visibleProperties.length} resultado${
+                          visibleProperties.length === 1 ? "" : "s"
+                        }`}
+                  </p>
+                  <p className="text-sm text-black/50">
+                    Combina zona, tipo, precio y moneda para encontrar mas rapido.
+                  </p>
+                </div>
+                <button
+                  className="w-full rounded-md border border-black/10 px-4 py-2 text-sm font-medium text-black/70 transition hover:bg-black/5 sm:w-auto"
+                  onClick={clearFilters}
+                  type="button"
+                >
+                  Limpiar filtros
+                </button>
+              </div>
+
+              {activeFilters.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {activeFilters.map((filter) => (
+                    <span
+                      className="rounded-full bg-[#edf2e7] px-3 py-1 text-xs font-semibold text-[#4d5e39]"
+                      key={filter.key}
+                    >
+                      {filter.label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr_1fr_0.8fr_1fr]">
               <label className="grid gap-1 text-sm font-medium">
-                Buscar zona
+                Buscar
                 <input
                   className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Ej: centro, norte, Valle Viejo"
+                  placeholder="Zona, titulo, tipo o telefono"
                   value={search}
                 />
               </label>
@@ -1335,38 +1430,61 @@ export default function PropertyApp() {
                   {isSellerSession ? <option value="draft">Borradores</option> : null}
                 </select>
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="grid gap-1 text-sm font-medium">
-                  Min
-                  <input
-                    className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
-                    inputMode="decimal"
-                    min="0"
-                    onChange={(event) => setMinPrice(event.target.value)}
-                    type="number"
-                    value={minPrice}
-                  />
-                </label>
-                <label className="grid gap-1 text-sm font-medium">
-                  Max
-                  <input
-                    className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
-                    inputMode="decimal"
-                    min="0"
-                    onChange={(event) => setMaxPrice(event.target.value)}
-                    type="number"
-                    value={maxPrice}
-                  />
-                </label>
-              </div>
-              <div className="flex items-end">
-                <button
-                  className="w-full rounded-md border border-black/10 px-4 py-2 text-sm font-medium text-black/70 transition hover:bg-black/5"
-                  onClick={clearFilters}
-                  type="button"
+              <label className="grid gap-1 text-sm font-medium">
+                Moneda
+                <select
+                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                  onChange={(event) =>
+                    setCurrencyFilter(event.target.value as CurrencyFilter)
+                  }
+                  value={currencyFilter}
                 >
-                  Limpiar
-                </button>
+                  <option value="all">Todas</option>
+                  <option value="USD">USD</option>
+                  <option value="ARS">ARS</option>
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Orden
+                <select
+                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                  onChange={(event) =>
+                    setSortOption(event.target.value as SortOption)
+                  }
+                  value={sortOption}
+                >
+                  <option value="recent">Mas recientes</option>
+                  <option value="price-asc">Menor precio</option>
+                  <option value="price-desc">Mayor precio</option>
+                </select>
+              </label>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
+              <label className="grid gap-1 text-sm font-medium">
+                Precio minimo
+                <input
+                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                  inputMode="decimal"
+                  min="0"
+                  onChange={(event) => setMinPrice(event.target.value)}
+                  placeholder="Ej: 50000"
+                  type="number"
+                  value={minPrice}
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Precio maximo
+                <input
+                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                  inputMode="decimal"
+                  min="0"
+                  onChange={(event) => setMaxPrice(event.target.value)}
+                  placeholder="Ej: 150000"
+                  type="number"
+                  value={maxPrice}
+                />
+              </label>
               </div>
             </div>
           </div>
