@@ -452,6 +452,7 @@ function loadGoogleMaps() {
 function PropertyForm({
   form,
   isSaving,
+  onPickMap,
   setForm,
   status,
   submitProperty,
@@ -459,6 +460,7 @@ function PropertyForm({
 }: {
   form: FormState;
   isSaving: boolean;
+  onPickMap: () => void;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
   status: string;
   submitProperty: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
@@ -637,35 +639,32 @@ function PropertyForm({
           value={form.locationLabel}
         />
       </label>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="grid gap-1 text-sm font-medium">
-          Latitud
-          <input
-            className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                latitude: event.target.value,
-              }))
-            }
-            type="number"
-            value={form.latitude}
-          />
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Longitud
-          <input
-            className="rounded-md border border-black/15 px-3 py-2 font-normal outline-none focus:border-black"
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                longitude: event.target.value,
-              }))
-            }
-            type="number"
-            value={form.longitude}
-          />
-        </label>
+      <div className="grid gap-3 rounded-md border border-black/10 bg-[#f7f5f0] p-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold">Ubicacion en el mapa</p>
+            <p className="text-xs leading-5 text-black/50">
+              No hace falta escribir coordenadas. Toca el mapa y la app las
+              completa sola.
+            </p>
+          </div>
+          <button
+            className="rounded-md bg-[#6e7d5b] px-4 py-2 text-sm font-semibold text-white"
+            onClick={onPickMap}
+            type="button"
+          >
+            Elegir en mapa
+          </button>
+        </div>
+        {form.latitude && form.longitude ? (
+          <p className="rounded-md bg-white px-3 py-2 text-xs text-black/55">
+            Ubicacion seleccionada: {form.latitude}, {form.longitude}
+          </p>
+        ) : (
+          <p className="rounded-md bg-white px-3 py-2 text-xs text-black/45">
+            Todavia no seleccionaste una ubicacion.
+          </p>
+        )}
       </div>
       <label className="grid gap-1 text-sm font-medium">
         Fotos
@@ -782,6 +781,7 @@ export default function PropertyApp() {
   const router = useRouter();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<GoogleMap | null>(null);
+  const isPickingLocationRef = useRef(false);
   const [properties, setProperties] = useState<PropertyListing[]>([]);
   const [selected, setSelected] = useState<PropertyListing | null>(null);
   const [user, setUser] = useState<AuthModel>(() => pb.authStore.model);
@@ -791,6 +791,7 @@ export default function PropertyApp() {
   const [isSaving, setIsSaving] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
   const [search, setSearch] = useState("");
   const [listingView, setListingView] = useState<ListingView>("all");
   const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
@@ -802,6 +803,10 @@ export default function PropertyApp() {
   const isSellerSession = Boolean(user);
   const userId = user?.id;
   const isAdminSession = adminEmails.includes(modelEmail(user));
+
+  useEffect(() => {
+    isPickingLocationRef.current = isPickingLocation;
+  }, [isPickingLocation]);
 
   const visibleProperties = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -1029,8 +1034,13 @@ export default function PropertyApp() {
             latitude: event.latLng!.lat().toFixed(6),
             longitude: event.latLng!.lng().toFixed(6),
           }));
+          setIsPickingLocation(false);
           setIsEditorOpen(true);
-          setStatus("Ubicacion exacta seleccionada. Completa los datos.");
+          setStatus(
+            isPickingLocationRef.current
+              ? "Ubicacion seleccionada en el mapa."
+              : "Ubicacion exacta seleccionada. Completa los datos.",
+          );
         });
 
         mapRef.current = map;
@@ -1161,6 +1171,39 @@ export default function PropertyApp() {
     setSortOption("recent");
     setMinPrice("");
     setMaxPrice("");
+  }
+
+  function startMapLocationPick() {
+    setIsPickingLocation(true);
+    setIsEditorOpen(false);
+    setStatus("Toca el mapa donde esta la propiedad.");
+    window.setTimeout(() => {
+      mapContainerRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 50);
+  }
+
+  function selectFallbackMapLocation(event: React.MouseEvent<HTMLDivElement>) {
+    if (!isPickingLocation) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const xRatio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const yRatio = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+    const latitude =
+      fallbackBounds.north - yRatio * (fallbackBounds.north - fallbackBounds.south);
+    const longitude =
+      fallbackBounds.west + xRatio * (fallbackBounds.east - fallbackBounds.west);
+
+    setForm((current) => ({
+      ...current,
+      latitude: latitude.toFixed(6),
+      longitude: longitude.toFixed(6),
+    }));
+    setIsPickingLocation(false);
+    setIsEditorOpen(true);
+    setStatus("Ubicacion seleccionada en el mapa.");
   }
 
   function editProperty(property: PropertyListing) {
@@ -1656,7 +1699,15 @@ export default function PropertyApp() {
             </div>
           </div>
 
-          <div className="relative min-h-[560px] overflow-hidden rounded-md border border-black/10 bg-[#d9ded0] shadow-sm">
+          <div
+            className={`relative min-h-[560px] overflow-hidden rounded-md border bg-[#d9ded0] shadow-sm ${
+              isPickingLocation
+                ? "cursor-crosshair border-[#6e7d5b] ring-4 ring-[#6e7d5b]/25"
+                : "border-black/10"
+            }`}
+            onClick={selectFallbackMapLocation}
+            ref={!googleMapsApiKey ? mapContainerRef : undefined}
+          >
             {googleMapsApiKey ? (
               <div ref={mapContainerRef} className="absolute inset-0" />
             ) : (
@@ -1668,6 +1719,18 @@ export default function PropertyApp() {
                 title="Mapa de Gran Catamarca"
               />
             )}
+            {isPickingLocation ? (
+              <div className="pointer-events-none absolute left-4 right-4 top-4 z-30 rounded-md bg-white/95 px-4 py-3 text-sm font-semibold text-[#4d5e39] shadow-sm md:left-auto md:w-[340px]">
+                Toca el punto exacto donde esta la propiedad.
+              </div>
+            ) : null}
+            {isPickingLocation && !googleMapsApiKey ? (
+              <button
+                aria-label="Seleccionar ubicacion en el mapa"
+                className="absolute inset-0 z-20 cursor-crosshair bg-transparent"
+                type="button"
+              />
+            ) : null}
             {!googleMapsApiKey
               ? visibleProperties.map((property) => {
                   const position = mapPosition(property);
@@ -1723,6 +1786,7 @@ export default function PropertyApp() {
               <PropertyForm
                 form={form}
                 isSaving={isSaving}
+                onPickMap={startMapLocationPick}
                 setForm={setForm}
                 status={status}
                 submitProperty={submitProperty}
