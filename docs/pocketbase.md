@@ -11,6 +11,9 @@ NEXT_PUBLIC_POCKETBASE_URL=http://127.0.0.1:8090
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
 NEXT_PUBLIC_DEFAULT_CURRENCY=USD
 NEXT_PUBLIC_MERCADO_PAGO_DONATION_URL=
+NEXT_PUBLIC_APP_URL=https://inmobiliaria.catamarca.io
+NEXT_PUBLIC_ADMIN_EMAILS=
+ADMIN_EMAILS=
 POCKETBASE_SUPERUSER_EMAIL=
 POCKETBASE_SUPERUSER_PASSWORD=
 GOOGLE_CLIENT_ID=
@@ -20,6 +23,8 @@ GOOGLE_CLIENT_SECRET=
 `.env.local` no debe versionarse.
 
 `NEXT_PUBLIC_MERCADO_PAGO_DONATION_URL` puede apuntar a un link de pago de Mercado Pago para recibir aportes voluntarios de mantenimiento.
+
+`NEXT_PUBLIC_APP_URL` se usa para SEO y links compartidos. `NEXT_PUBLIC_ADMIN_EMAILS` muestra el panel admin en la app y `ADMIN_EMAILS` protege las acciones del servidor; ambos aceptan emails separados por coma. Para que el admin pueda ocultar, destacar o eliminar publicaciones de otros vendedores, tambien deben estar configuradas `POCKETBASE_SUPERUSER_EMAIL` y `POCKETBASE_SUPERUSER_PASSWORD` en Dokploy.
 
 ## Coleccion `properties`
 
@@ -39,6 +44,7 @@ Crear una coleccion base llamada `properties` con estos campos:
 | `longitude` | number | si | Coordenada para Google Maps. |
 | `author` | relation | si | Relacion a `_pb_users_auth_`. |
 | `status` | select | si | Valores iniciales: `published`, `draft`, `sold`. |
+| `featured` | bool | no | Permite destacar propiedades en portada y resultados. |
 
 ## Reglas recomendadas
 

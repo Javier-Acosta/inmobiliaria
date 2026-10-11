@@ -92,6 +92,7 @@ try {
       maxSelect: 1,
       values: ["published", "draft", "sold"],
     },
+    { name: "featured", type: "bool", required: false },
     { name: "created", type: "autodate", onCreate: true, onUpdate: false },
     { name: "updated", type: "autodate", onCreate: true, onUpdate: true },
   ];
@@ -131,6 +132,7 @@ try {
       (field) =>
         (field.name === "propertyType" ||
           field.name === "contactPhone" ||
+          field.name === "featured" ||
           field.name === "created" ||
           field.name === "updated") &&
         !existingFieldNames.has(field.name),

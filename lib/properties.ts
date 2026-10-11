@@ -16,6 +16,7 @@ export type PropertyListing = {
   longitude: number;
   author: string;
   status: "published" | "draft" | "sold";
+  featured: boolean;
 };
 
 export const demoProperties: PropertyListing[] = [
@@ -36,6 +37,7 @@ export const demoProperties: PropertyListing[] = [
     longitude: -65.7852,
     author: "demo",
     status: "published",
+    featured: true,
   },
   {
     id: "demo-valle-viejo",
@@ -54,6 +56,7 @@ export const demoProperties: PropertyListing[] = [
     longitude: -65.7231,
     author: "demo",
     status: "sold",
+    featured: false,
   },
   {
     id: "demo-zona-norte",
@@ -72,6 +75,7 @@ export const demoProperties: PropertyListing[] = [
     longitude: -65.7757,
     author: "demo",
     status: "published",
+    featured: true,
   },
 ];
 
@@ -99,6 +103,7 @@ export function propertyFromRecord(record: RecordModel): PropertyListing {
       record.status === "draft" || record.status === "sold"
         ? record.status
         : "published",
+    featured: Boolean(record.featured),
   };
 }
 

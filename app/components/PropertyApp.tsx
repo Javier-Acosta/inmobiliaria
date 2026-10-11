@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthModel } from "pocketbase";
 
 import {
+  adminEmails,
   defaultCurrency,
   googleMapsApiKey,
   mercadoPagoDonationUrl,
@@ -277,6 +278,18 @@ function modelName(model: AuthModel) {
   return data.name || data.email || "Usuario";
 }
 
+function modelEmail(model: AuthModel) {
+  if (!model) return "";
+  const data = model as { email?: string };
+  return data.email?.toLowerCase() ?? "";
+}
+
+function statusLabel(status: PropertyListing["status"]) {
+  if (status === "sold") return "Vendido";
+  if (status === "draft") return "Oculto";
+  return "Disponible";
+}
+
 function mapPosition(property: PropertyListing) {
   const rawLeft =
     ((property.longitude - fallbackBounds.west) /
@@ -388,6 +401,28 @@ async function copyTextToClipboard(text: string) {
   textarea.select();
   document.execCommand("copy");
   textarea.remove();
+}
+
+async function adminPropertyRequest(
+  id: string,
+  options: {
+    body?: Record<string, boolean | string>;
+    method: "DELETE" | "PATCH";
+    token: string;
+  },
+) {
+  const response = await fetch(`/api/admin/properties/${id}`, {
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    headers: {
+      authorization: `Bearer ${options.token}`,
+      ...(options.body ? { "content-type": "application/json" } : {}),
+    },
+    method: options.method,
+  });
+
+  if (!response.ok) {
+    throw new Error("Admin request failed.");
+  }
 }
 
 function loadGoogleMaps() {
@@ -766,6 +801,7 @@ export default function PropertyApp() {
   const [maxPrice, setMaxPrice] = useState("");
   const isSellerSession = Boolean(user);
   const userId = user?.id;
+  const isAdminSession = adminEmails.includes(modelEmail(user));
 
   const visibleProperties = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -824,6 +860,9 @@ export default function PropertyApp() {
       : filteredItems;
 
     return [...searchedItems].sort((first, second) => {
+      if (first.featured !== second.featured) {
+        return first.featured ? -1 : 1;
+      }
       if (sortOption === "price-asc") return first.price - second.price;
       if (sortOption === "price-desc") return second.price - first.price;
       return 0;
@@ -915,14 +954,21 @@ export default function PropertyApp() {
     [properties],
   );
 
+  const adminProperties = useMemo(
+    () => properties.filter((property) => !isDemoProperty(property)),
+    [properties],
+  );
+
   const loadProperties = useCallback(async () => {
     setIsLoading(true);
     try {
-      const filter = userId
+      const filter = isAdminSession
+        ? ""
+        : userId
         ? pb.filter("author = {:author}", { author: userId })
         : 'status = "published" || status = "sold"';
       const records = await pb.collection("properties").getFullList({
-        filter,
+        ...(filter ? { filter } : {}),
         sort: "-created",
       });
       const items = records.map(propertyFromRecord);
@@ -936,7 +982,7 @@ export default function PropertyApp() {
     } finally {
       setIsLoading(false);
     }
-  }, [pb, userId]);
+  }, [isAdminSession, pb, userId]);
 
   useEffect(() => {
     void Promise.resolve().then(loadProperties);
@@ -1123,7 +1169,7 @@ export default function PropertyApp() {
       return;
     }
 
-    if (property.author && property.author !== user.id) {
+    if (!isAdminSession && property.author && property.author !== user.id) {
       setStatus("Solo el autor puede editar esta propiedad.");
       return;
     }
@@ -1245,7 +1291,7 @@ export default function PropertyApp() {
       return;
     }
 
-    if (property.author && property.author !== user.id) {
+    if (!isAdminSession && property.author && property.author !== user.id) {
       setStatus("Solo el autor puede eliminar esta propiedad.");
       return;
     }
@@ -1253,7 +1299,14 @@ export default function PropertyApp() {
     if (!window.confirm(`Eliminar "${property.title}"?`)) return;
 
     try {
-      await pb.collection("properties").delete(property.id);
+      if (isAdminSession) {
+        await adminPropertyRequest(property.id, {
+          method: "DELETE",
+          token: pb.authStore.token,
+        });
+      } else {
+        await pb.collection("properties").delete(property.id);
+      }
       setSelected(null);
       setStatus("Propiedad eliminada.");
       await loadProperties();
@@ -1268,7 +1321,7 @@ export default function PropertyApp() {
       return;
     }
 
-    if (property.author && property.author !== user.id) {
+    if (!isAdminSession && property.author && property.author !== user.id) {
       setStatus("Solo el autor puede marcar esta propiedad como vendida.");
       return;
     }
@@ -1284,6 +1337,73 @@ export default function PropertyApp() {
       await loadProperties();
     } catch {
       setStatus("No se pudo marcar como vendida.");
+    }
+  }
+
+  async function updatePropertyStatus(
+    property: PropertyListing,
+    nextStatus: PropertyListing["status"],
+  ) {
+    if (!user) {
+      setStatus("Inicia sesion con Google para administrar.");
+      return;
+    }
+
+    if (!isAdminSession && property.author && property.author !== user.id) {
+      setStatus("Solo el autor puede cambiar esta propiedad.");
+      return;
+    }
+
+    try {
+      if (isAdminSession) {
+        await adminPropertyRequest(property.id, {
+          body: { status: nextStatus },
+          method: "PATCH",
+          token: pb.authStore.token,
+        });
+      } else {
+        await pb.collection("properties").update(property.id, {
+          status: nextStatus,
+        });
+      }
+      setSelected((current) =>
+        current?.id === property.id ? { ...current, status: nextStatus } : current,
+      );
+      setStatus(
+        nextStatus === "draft"
+          ? "Publicacion oculta."
+          : nextStatus === "sold"
+            ? "Propiedad marcada como vendida."
+            : "Publicacion visible.",
+      );
+      await loadProperties();
+    } catch {
+      setStatus("No se pudo actualizar el estado.");
+    }
+  }
+
+  async function toggleFeaturedProperty(property: PropertyListing) {
+    if (!isAdminSession) {
+      setStatus("Solo un administrador puede destacar publicaciones.");
+      return;
+    }
+
+    try {
+      const featured = !property.featured;
+      await adminPropertyRequest(property.id, {
+        body: { featured },
+        method: "PATCH",
+        token: pb.authStore.token,
+      });
+      setSelected((current) =>
+        current?.id === property.id ? { ...current, featured } : current,
+      );
+      setStatus(featured ? "Publicacion destacada." : "Destaque quitado.");
+      await loadProperties();
+    } catch {
+      setStatus(
+        "No se pudo cambiar el destaque. Revisa que exista el campo featured en PocketBase.",
+      );
     }
   }
 
@@ -1612,6 +1732,107 @@ export default function PropertyApp() {
           </div>
         ) : null}
 
+        {isAdminSession ? (
+          <section className="grid gap-5 rounded-md border border-black/10 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.14em] text-[#6e7d5b]">
+                  Administracion
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Revisar publicaciones
+                </h2>
+                <p className="mt-1 text-sm text-black/60">
+                  Oculta, publica o destaca propiedades desde un solo lugar.
+                </p>
+              </div>
+              <span className="w-fit rounded-full bg-black px-4 py-2 text-sm font-semibold text-white">
+                {adminProperties.length} reales
+              </span>
+            </div>
+
+            {adminProperties.length > 0 ? (
+              <div className="overflow-hidden rounded-md border border-black/10">
+                <div className="hidden grid-cols-[1fr_120px_260px] gap-4 border-b border-black/10 bg-[#f7f5f0] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-black/50 lg:grid">
+                  <span>Publicacion</span>
+                  <span>Estado</span>
+                  <span>Acciones</span>
+                </div>
+                <div className="divide-y divide-black/10">
+                  {adminProperties.map((property) => (
+                    <article
+                      className="grid gap-4 px-4 py-4 lg:grid-cols-[1fr_120px_260px] lg:items-center"
+                      key={`admin-${property.id}`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            className="font-semibold transition hover:text-[#6e7d5b]"
+                            href={`/propiedades/${property.id}`}
+                          >
+                            {property.title}
+                          </Link>
+                          {property.featured ? (
+                            <span className="rounded-full bg-[#edf2e7] px-2 py-1 text-xs font-semibold text-[#4d5e39]">
+                              Destacada
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-sm text-black/60">
+                          {formatPrice(property)} · {property.locationLabel}
+                        </p>
+                      </div>
+                      <span
+                        className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                          property.status === "sold"
+                            ? "bg-red-50 text-red-700"
+                            : property.status === "draft"
+                              ? "bg-black/5 text-black/55"
+                              : "bg-[#edf2e7] text-[#4d5e39]"
+                        }`}
+                      >
+                        {statusLabel(property.status)}
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className="rounded-md border border-black/10 px-3 py-2 text-sm"
+                          onClick={() => toggleFeaturedProperty(property)}
+                          type="button"
+                        >
+                          {property.featured ? "Quitar destaque" : "Destacar"}
+                        </button>
+                        <button
+                          className="rounded-md border border-black/10 px-3 py-2 text-sm"
+                          onClick={() =>
+                            updatePropertyStatus(
+                              property,
+                              property.status === "draft" ? "published" : "draft",
+                            )
+                          }
+                          type="button"
+                        >
+                          {property.status === "draft" ? "Publicar" : "Ocultar"}
+                        </button>
+                        <button
+                          className="rounded-md border border-red-700/20 px-3 py-2 text-sm text-red-700"
+                          onClick={() => deleteProperty(property)}
+                          type="button"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-black/15 bg-[#f7f5f0] p-5 text-sm text-black/60">
+                Todavia no hay publicaciones reales para administrar.
+              </div>
+            )}
+          </section>
+        ) : null}
+
         {isSellerSession ? (
           <section className="grid gap-5 rounded-md border border-black/10 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1697,10 +1918,12 @@ export default function PropertyApp() {
                         className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
                           property.status === "sold"
                             ? "bg-red-50 text-red-700"
-                            : "bg-[#edf2e7] text-[#4d5e39]"
+                            : property.status === "draft"
+                              ? "bg-black/5 text-black/55"
+                              : "bg-[#edf2e7] text-[#4d5e39]"
                         }`}
                       >
-                        {property.status === "sold" ? "Vendido" : "Disponible"}
+                        {statusLabel(property.status)}
                       </span>
                       <div className="flex flex-wrap gap-2">
                         <Link
@@ -1839,6 +2062,18 @@ export default function PropertyApp() {
                       <p className="text-sm text-[#6e7d5b]">
                         {property.locationLabel}
                       </p>
+                      <div className="flex flex-wrap gap-2">
+                        {property.featured ? (
+                          <span className="w-fit rounded-full bg-[#edf2e7] px-2 py-1 text-xs font-semibold text-[#4d5e39]">
+                            Destacada
+                          </span>
+                        ) : null}
+                        {property.status === "draft" ? (
+                          <span className="w-fit rounded-full bg-black/5 px-2 py-1 text-xs font-medium text-black/50">
+                            Oculta
+                          </span>
+                        ) : null}
+                      </div>
                       {property.contactPhone ? (
                         <p className="text-sm text-black/50">
                           {displayContactPhone(property.contactPhone)}
@@ -1913,7 +2148,7 @@ export default function PropertyApp() {
                 >
                   Compartir
                 </button>
-                {user && selected.author === user.id ? (
+                {user && (isAdminSession || selected.author === user.id) ? (
                   <>
                     <button
                       className="rounded-full border border-black/10 px-4 py-2 text-sm"
@@ -1925,7 +2160,11 @@ export default function PropertyApp() {
                     <button
                       className="rounded-full border border-red-700/20 px-4 py-2 text-sm text-red-700 disabled:opacity-50"
                       disabled={selected.status === "sold"}
-                      onClick={() => markPropertySold(selected)}
+                      onClick={() =>
+                        isAdminSession
+                          ? updatePropertyStatus(selected, "sold")
+                          : markPropertySold(selected)
+                      }
                       type="button"
                     >
                       Vendido

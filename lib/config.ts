@@ -20,3 +20,21 @@ export const googleMapsApiKey =
 
 export const mercadoPagoDonationUrl =
   process.env.NEXT_PUBLIC_MERCADO_PAGO_DONATION_URL?.trim() || "";
+
+export const appUrl =
+  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
+  "https://inmobiliaria.catamarca.io";
+
+export const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
+
+export const serverAdminEmails = (
+  process.env.ADMIN_EMAILS ??
+  process.env.NEXT_PUBLIC_ADMIN_EMAILS ??
+  ""
+)
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
