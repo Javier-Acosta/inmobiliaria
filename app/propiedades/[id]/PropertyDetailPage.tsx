@@ -64,7 +64,9 @@ function SoldRibbon() {
 export default function PropertyDetailPage({ id }: { id: string }) {
   const pb = useMemo(() => getPocketBase(), []);
   const [property, setProperty] = useState<PropertyListing | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState(0);
   const [status, setStatus] = useState("Cargando publicacion...");
+  const [shareStatus, setShareStatus] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +76,7 @@ export default function PropertyDetailPage({ id }: { id: string }) {
 
       if (demo) {
         setProperty(demo);
+        setSelectedPhoto(0);
         setStatus("");
         return;
       }
@@ -82,6 +85,7 @@ export default function PropertyDetailPage({ id }: { id: string }) {
         const record = await pb.collection("properties").getOne(id);
         if (cancelled) return;
         setProperty(propertyFromRecord(record));
+        setSelectedPhoto(0);
         setStatus("");
       } catch {
         if (cancelled) return;
@@ -95,6 +99,32 @@ export default function PropertyDetailPage({ id }: { id: string }) {
       cancelled = true;
     };
   }, [id, pb]);
+
+  async function shareProperty() {
+    if (!property || typeof window === "undefined") return;
+
+    const url = window.location.href;
+    const text = `${property.title} - ${formatPrice(property)}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: property.title,
+          text,
+          url,
+        });
+        setShareStatus("Link compartido.");
+        return;
+      }
+
+      await navigator.clipboard.writeText(url);
+      setShareStatus("Link copiado.");
+    } catch {
+      setShareStatus("No se pudo compartir el link.");
+    }
+  }
+
+  const currentPhoto = property?.photos[selectedPhoto] ?? property?.photos[0];
 
   return (
     <main className="min-h-screen bg-[#f7f5f0] text-[#171717]">
@@ -118,19 +148,20 @@ export default function PropertyDetailPage({ id }: { id: string }) {
         ) : null}
 
         {property ? (
-          <article className="grid gap-6 rounded-md border border-black/10 bg-white p-5 shadow-sm">
-            <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
+          <article className="grid gap-6">
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
               <div className="grid gap-4">
-                <div className="relative aspect-[16/10] overflow-hidden rounded-md bg-[#e8e2d8]">
+                <div className="relative aspect-[16/10] overflow-hidden rounded-md bg-[#e8e2d8] shadow-sm">
                   {property.status === "sold" ? <SoldRibbon /> : null}
-                  {property.photos[0] ? (
+                  {currentPhoto ? (
                     <Image
                       alt={property.title}
                       className="object-cover"
                       fill
                       sizes="(min-width: 1024px) 60vw, 100vw"
-                      src={property.photos[0]}
-                      unoptimized={property.photos[0].startsWith("http")}
+                      src={currentPhoto}
+                      unoptimized={currentPhoto.startsWith("http")}
+                      priority
                     />
                   ) : (
                     <div className="grid h-full place-items-center text-center text-black/50">
@@ -138,11 +169,44 @@ export default function PropertyDetailPage({ id }: { id: string }) {
                     </div>
                   )}
                 </div>
-                <p className="leading-7 text-black/70">{property.description}</p>
+
+                {property.photos.length > 1 ? (
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                    {property.photos.map((photo, index) => (
+                      <button
+                        aria-label={`Ver foto ${index + 1}`}
+                        className={`relative aspect-[4/3] overflow-hidden rounded-md border bg-[#e8e2d8] ${
+                          selectedPhoto === index
+                            ? "border-[#6e7d5b] ring-2 ring-[#6e7d5b]/30"
+                            : "border-black/10"
+                        }`}
+                        key={photo}
+                        onClick={() => setSelectedPhoto(index)}
+                        type="button"
+                      >
+                        <Image
+                          alt={`${property.title} foto ${index + 1}`}
+                          className="object-cover"
+                          fill
+                          sizes="120px"
+                          src={photo}
+                          unoptimized={photo.startsWith("http")}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                <section className="rounded-md border border-black/10 bg-white p-5 shadow-sm">
+                  <h2 className="text-xl font-semibold">Descripcion</h2>
+                  <p className="mt-3 leading-7 text-black/70">
+                    {property.description}
+                  </p>
+                </section>
               </div>
 
-              <aside className="grid content-start gap-4">
-                <div>
+              <aside className="grid content-start gap-4 lg:sticky lg:top-6">
+                <div className="rounded-md border border-black/10 bg-white p-5 shadow-sm">
                   <p className="text-sm font-medium text-[#6e7d5b]">
                     {property.locationLabel}
                   </p>
@@ -155,16 +219,30 @@ export default function PropertyDetailPage({ id }: { id: string }) {
                   <p className="mt-3 text-2xl font-semibold">
                     {formatPrice(property)}
                   </p>
+
+                  <div className="mt-5 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-md bg-[#f7f5f0] p-3">
+                      <p className="text-black/45">Tipo</p>
+                      <p className="mt-1 font-semibold">{property.propertyType}</p>
+                    </div>
+                    <div className="rounded-md bg-[#f7f5f0] p-3">
+                      <p className="text-black/45">Estado</p>
+                      <p className="mt-1 font-semibold">
+                        {property.status === "sold" ? "Vendido" : "Disponible"}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {property.contactPhone ? (
-                  <div className="rounded-md border border-black/10 bg-[#f7f5f0] p-4">
-                    <p className="text-sm text-black/60">
+                  <div className="rounded-md border border-black/10 bg-white p-5 shadow-sm">
+                    <h2 className="text-lg font-semibold">Contactar</h2>
+                    <p className="mt-2 text-sm text-black/60">
                       Contacto: {displayContactPhone(property.contactPhone)}
                     </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
                       <a
-                        className="rounded-full bg-[#25d366] px-4 py-2 text-sm font-semibold text-white"
+                        className="rounded-md bg-[#25d366] px-4 py-3 text-center text-sm font-semibold text-white"
                         href={whatsappUrl(property)}
                         rel="noreferrer"
                         target="_blank"
@@ -172,7 +250,7 @@ export default function PropertyDetailPage({ id }: { id: string }) {
                         WhatsApp
                       </a>
                       <a
-                        className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm"
+                        className="rounded-md border border-black/10 bg-white px-4 py-3 text-center text-sm font-semibold"
                         href={`tel:${phoneHref(property.contactPhone)}`}
                       >
                         Llamar
@@ -181,7 +259,22 @@ export default function PropertyDetailPage({ id }: { id: string }) {
                   </div>
                 ) : null}
 
-                <div className="overflow-hidden rounded-md border border-black/10 bg-[#f7f5f0]">
+                <div className="rounded-md border border-black/10 bg-white p-5 shadow-sm">
+                  <button
+                    className="w-full rounded-md bg-black px-4 py-3 text-sm font-semibold text-white"
+                    onClick={shareProperty}
+                    type="button"
+                  >
+                    Compartir publicacion
+                  </button>
+                  {shareStatus ? (
+                    <p className="mt-3 text-center text-sm text-black/60">
+                      {shareStatus}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="overflow-hidden rounded-md border border-black/10 bg-white shadow-sm">
                   {Number.isFinite(property.latitude) &&
                   Number.isFinite(property.longitude) ? (
                     <iframe
