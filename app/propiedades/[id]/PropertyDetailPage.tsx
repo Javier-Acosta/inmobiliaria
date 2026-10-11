@@ -53,6 +53,10 @@ function whatsappUrl(property: PropertyListing) {
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
+function googleMapsUrl(property: PropertyListing) {
+  return `https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`;
+}
+
 function SoldRibbon() {
   return (
     <span className="absolute right-[-36px] top-5 z-10 rotate-45 bg-red-700 px-12 py-1 text-xs font-bold tracking-[0.16em] text-white shadow-md">
@@ -127,7 +131,7 @@ export default function PropertyDetailPage({ id }: { id: string }) {
   const currentPhoto = property?.photos[selectedPhoto] ?? property?.photos[0];
 
   return (
-    <main className="min-h-screen bg-[#f7f5f0] text-[#171717]">
+    <main className="min-h-screen bg-[#f7f5f0] pb-24 text-[#171717] lg:pb-0">
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-6 sm:px-8 lg:px-10">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
@@ -203,15 +207,45 @@ export default function PropertyDetailPage({ id }: { id: string }) {
                     {property.description}
                   </p>
                 </section>
+
+                <section className="grid gap-3 rounded-md border border-black/10 bg-white p-5 shadow-sm sm:grid-cols-3">
+                  <div>
+                    <p className="text-sm text-black/45">Ubicacion</p>
+                    <p className="mt-1 font-semibold">{property.locationLabel}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-black/45">Precio</p>
+                    <p className="mt-1 font-semibold">{formatPrice(property)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-black/45">Contacto</p>
+                    <p className="mt-1 font-semibold">
+                      {property.contactPhone
+                        ? displayContactPhone(property.contactPhone)
+                        : "No publicado"}
+                    </p>
+                  </div>
+                </section>
               </div>
 
               <aside className="grid content-start gap-4 lg:sticky lg:top-6">
                 <div className="rounded-md border border-black/10 bg-white p-5 shadow-sm">
-                  <p className="text-sm font-medium text-[#6e7d5b]">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full bg-[#edf2e7] px-3 py-1 text-xs font-semibold text-[#4d5e39]">
+                      {property.propertyType}
+                    </span>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        property.status === "sold"
+                          ? "bg-red-50 text-red-700"
+                          : "bg-[#f7f5f0] text-black/60"
+                      }`}
+                    >
+                      {property.status === "sold" ? "Vendido" : "Disponible"}
+                    </span>
+                  </div>
+                  <p className="mt-4 text-sm font-medium text-[#6e7d5b]">
                     {property.locationLabel}
-                  </p>
-                  <p className="mt-2 text-sm font-medium text-black/50">
-                    {property.propertyType}
                   </p>
                   <h1 className="mt-2 text-3xl font-semibold">
                     {property.title}
@@ -275,6 +309,25 @@ export default function PropertyDetailPage({ id }: { id: string }) {
                 </div>
 
                 <div className="overflow-hidden rounded-md border border-black/10 bg-white shadow-sm">
+                  <div className="flex items-center justify-between gap-3 border-b border-black/10 p-4">
+                    <div>
+                      <h2 className="font-semibold">Ubicacion exacta</h2>
+                      <p className="mt-1 text-sm text-black/50">
+                        {property.locationLabel}
+                      </p>
+                    </div>
+                    {Number.isFinite(property.latitude) &&
+                    Number.isFinite(property.longitude) ? (
+                      <a
+                        className="shrink-0 rounded-md border border-black/10 px-3 py-2 text-sm font-semibold"
+                        href={googleMapsUrl(property)}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Abrir en Maps
+                      </a>
+                    ) : null}
+                  </div>
                   {Number.isFinite(property.latitude) &&
                   Number.isFinite(property.longitude) ? (
                     <iframe
@@ -292,6 +345,25 @@ export default function PropertyDetailPage({ id }: { id: string }) {
                 </div>
               </aside>
             </div>
+
+            {property.contactPhone ? (
+              <div className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 gap-2 border-t border-black/10 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur lg:hidden">
+                <a
+                  className="rounded-md bg-[#25d366] px-4 py-3 text-center text-sm font-semibold text-white"
+                  href={whatsappUrl(property)}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  WhatsApp
+                </a>
+                <a
+                  className="rounded-md border border-black/10 bg-white px-4 py-3 text-center text-sm font-semibold"
+                  href={`tel:${phoneHref(property.contactPhone)}`}
+                >
+                  Llamar
+                </a>
+              </div>
+            ) : null}
           </article>
         ) : null}
       </section>
