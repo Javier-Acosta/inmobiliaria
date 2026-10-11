@@ -6,7 +6,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthModel } from "pocketbase";
 
-import { defaultCurrency, googleMapsApiKey } from "@/lib/config";
+import {
+  defaultCurrency,
+  googleMapsApiKey,
+  mercadoPagoDonationUrl,
+} from "@/lib/config";
 import { getPocketBase } from "@/lib/pocketbase";
 import {
   demoProperties,
@@ -689,6 +693,26 @@ export default function PropertyApp() {
     [properties, userId],
   );
 
+  const ownProperties = useMemo(
+    () =>
+      userId
+        ? properties.filter((property) => property.author === userId)
+        : [],
+    [properties, userId],
+  );
+
+  const ownPublishedCount = useMemo(
+    () =>
+      ownProperties.filter((property) => property.status === "published")
+        .length,
+    [ownProperties],
+  );
+
+  const ownSoldCount = useMemo(
+    () => ownProperties.filter((property) => property.status === "sold").length,
+    [ownProperties],
+  );
+
   const demoPropertiesCount = useMemo(
     () => properties.filter(isDemoProperty).length,
     [properties],
@@ -1066,10 +1090,27 @@ export default function PropertyApp() {
             <p className="mt-3 text-sm font-medium uppercase tracking-[0.16em] text-[#6e7d5b]">
               Publica la tuya
             </p>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-black/60">
-              Explora la provincia desde el mapa, compara fotos y abre cada
-              propiedad para ver precio, ubicacion y detalle.
-            </p>
+            <div className="mt-4 flex max-w-2xl flex-col gap-3 text-base leading-7 text-black/60 sm:flex-row sm:items-center">
+              <p>
+                No cobramos porcentaje de venta. Si este sitio te ayuda a
+                publicar o encontrar propiedades, podes hacer una pequena
+                donacion para mantenerlo activo y seguir mejorandolo.
+              </p>
+              {mercadoPagoDonationUrl ? (
+                <a
+                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#009ee3] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0088c7]"
+                  href={mercadoPagoDonationUrl}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  Donar por Mercado Pago
+                </a>
+              ) : (
+                <span className="inline-flex shrink-0 items-center justify-center rounded-full border border-black/15 bg-white px-5 py-2 text-sm font-semibold text-black/45">
+                  Mercado Pago pendiente
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {user ? (
@@ -1271,6 +1312,139 @@ export default function PropertyApp() {
               />
             </div>
           </div>
+        ) : null}
+
+        {isSellerSession ? (
+          <section className="grid gap-5 rounded-md border border-black/10 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.14em] text-[#6e7d5b]">
+                  Vendedor
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Mis publicaciones
+                </h2>
+                <p className="mt-1 text-sm text-black/60">
+                  Administra tus propiedades sin mezclarlas con ejemplos ni
+                  publicaciones de otros vendedores.
+                </p>
+              </div>
+              <button
+                className="w-full rounded-md bg-[#6e7d5b] px-4 py-3 text-sm font-semibold text-white sm:w-auto"
+                onClick={startNewProperty}
+                type="button"
+              >
+                Nueva publicacion
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md bg-[#f7f5f0] p-4">
+                <p className="text-sm text-black/50">Total</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {ownProperties.length}
+                </p>
+              </div>
+              <div className="rounded-md bg-[#f7f5f0] p-4">
+                <p className="text-sm text-black/50">Disponibles</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {ownPublishedCount}
+                </p>
+              </div>
+              <div className="rounded-md bg-[#f7f5f0] p-4">
+                <p className="text-sm text-black/50">Vendidas</p>
+                <p className="mt-1 text-2xl font-semibold">{ownSoldCount}</p>
+              </div>
+            </div>
+
+            {ownProperties.length > 0 ? (
+              <div className="overflow-hidden rounded-md border border-black/10">
+                <div className="hidden grid-cols-[96px_1fr_120px_220px] gap-4 border-b border-black/10 bg-[#f7f5f0] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-black/50 lg:grid">
+                  <span>Foto</span>
+                  <span>Publicacion</span>
+                  <span>Estado</span>
+                  <span>Acciones</span>
+                </div>
+                <div className="divide-y divide-black/10">
+                  {ownProperties.map((property) => (
+                    <article
+                      className="grid gap-4 px-4 py-4 lg:grid-cols-[96px_1fr_120px_220px] lg:items-center"
+                      key={`seller-${property.id}`}
+                    >
+                      <Link
+                        className="block w-24 overflow-hidden rounded-md border border-black/10"
+                        href={`/propiedades/${property.id}`}
+                      >
+                        <PropertyPhoto
+                          className="aspect-[4/3]"
+                          property={property}
+                          sizes="96px"
+                        />
+                      </Link>
+                      <div className="min-w-0">
+                        <Link
+                          className="font-semibold transition hover:text-[#6e7d5b]"
+                          href={`/propiedades/${property.id}`}
+                        >
+                          {property.title}
+                        </Link>
+                        <p className="mt-1 text-sm text-black/60">
+                          {formatPrice(property)} · {property.propertyType}
+                        </p>
+                        <p className="mt-1 truncate text-sm text-[#6e7d5b]">
+                          {property.locationLabel}
+                        </p>
+                      </div>
+                      <span
+                        className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                          property.status === "sold"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-[#edf2e7] text-[#4d5e39]"
+                        }`}
+                      >
+                        {property.status === "sold" ? "Vendido" : "Disponible"}
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          className="rounded-md border border-black/10 px-3 py-2 text-sm"
+                          href={`/propiedades/${property.id}`}
+                        >
+                          Ver
+                        </Link>
+                        <button
+                          className="rounded-md border border-black/10 px-3 py-2 text-sm"
+                          onClick={() => editProperty(property)}
+                          type="button"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="rounded-md border border-red-700/20 px-3 py-2 text-sm text-red-700 disabled:opacity-50"
+                          disabled={property.status === "sold"}
+                          onClick={() => markPropertySold(property)}
+                          type="button"
+                        >
+                          Vendido
+                        </button>
+                        <button
+                          className="rounded-md border border-red-700/20 px-3 py-2 text-sm text-red-700"
+                          onClick={() => deleteProperty(property)}
+                          type="button"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-black/15 bg-[#f7f5f0] p-5 text-sm text-black/60">
+                Todavia no tenes publicaciones propias. Crea la primera desde
+                el boton Nueva publicacion o tocando una ubicacion en el mapa.
+              </div>
+            )}
+          </section>
         ) : null}
 
         <section className="grid gap-5">

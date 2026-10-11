@@ -10,6 +10,7 @@ Copiar `.env.example` a `.env.local` y completar los valores reales:
 NEXT_PUBLIC_POCKETBASE_URL=http://127.0.0.1:8090
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
 NEXT_PUBLIC_DEFAULT_CURRENCY=USD
+NEXT_PUBLIC_MERCADO_PAGO_DONATION_URL=
 POCKETBASE_SUPERUSER_EMAIL=
 POCKETBASE_SUPERUSER_PASSWORD=
 GOOGLE_CLIENT_ID=
@@ -17,6 +18,8 @@ GOOGLE_CLIENT_SECRET=
 ```
 
 `.env.local` no debe versionarse.
+
+`NEXT_PUBLIC_MERCADO_PAGO_DONATION_URL` puede apuntar a un link de pago de Mercado Pago para recibir aportes voluntarios de mantenimiento.
 
 ## Coleccion `properties`
 

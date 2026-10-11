@@ -17,3 +17,6 @@ export const defaultCurrency =
 
 export const googleMapsApiKey =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || "";
+
+export const mercadoPagoDonationUrl =
+  process.env.NEXT_PUBLIC_MERCADO_PAGO_DONATION_URL?.trim() || "";
