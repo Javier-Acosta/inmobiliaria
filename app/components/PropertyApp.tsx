@@ -14,7 +14,6 @@ import {
 } from "@/lib/config";
 import { getPocketBase } from "@/lib/pocketbase";
 import {
-  demoProperties,
   formatPrice,
   propertyFromRecord,
   type PropertyListing,
@@ -35,10 +34,11 @@ type FormState = {
   photos: File[];
 };
 
-type ListingView = "all" | "mine" | "demo";
+type ListingView = "all" | "mine";
 type StatusFilter = "all" | PropertyListing["status"];
 type CurrencyFilter = "all" | "ARS" | "USD";
 type SortOption = "recent" | "price-asc" | "price-desc";
+type ResultsView = "map" | "list";
 
 const emptyForm: FormState = {
   title: "",
@@ -226,6 +226,9 @@ const granCatamarcaMapUrl =
 const granCatamarcaCenter = { lat: -28.485, lng: -65.74 };
 
 type GoogleMap = {
+  fitBounds: (bounds: unknown, padding?: number) => void;
+  setCenter: (center: { lat: number; lng: number }) => void;
+  setZoom: (zoom: number) => void;
   addListener: (eventName: string, callback: (event: GoogleMapClickEvent) => void) => {
     remove: () => void;
   };
@@ -252,6 +255,10 @@ type GoogleMapsRuntime = {
         zoom: number;
       },
     ) => GoogleMap;
+    LatLngBounds: new () => {
+      extend: (point: { lat: number; lng: number }) => void;
+      getCenter: () => { lat: () => number; lng: () => number };
+    };
     OverlayView: new () => {
       draw: () => void;
       getPanes: () => { overlayMouseTarget?: HTMLElement } | null;
@@ -304,13 +311,6 @@ function mapPosition(property: PropertyListing) {
     left: `${Math.min(88, Math.max(8, rawLeft))}%`,
     top: `${Math.min(84, Math.max(12, rawTop))}%`,
   };
-}
-
-function mergeWithDemoProperties(items: PropertyListing[]) {
-  const itemIds = new Set(items.map((property) => property.id));
-  const demos = demoProperties.filter((property) => !itemIds.has(property.id));
-
-  return [...items, ...demos];
 }
 
 function isDemoProperty(property: PropertyListing) {
@@ -377,9 +377,17 @@ function phoneHref(phone: string) {
   return digits ? `+${digits}` : "";
 }
 
+function propertyPublicUrl(property: PropertyListing) {
+  if (typeof window === "undefined") return `/propiedades/${property.id}`;
+
+  return `${window.location.origin}/propiedades/${property.id}`;
+}
+
 function whatsappUrl(property: PropertyListing) {
   const digits = whatsappDigits(property.contactPhone);
-  const message = `Hola, quiero consultar por ${property.title}`;
+  const url = propertyPublicUrl(property);
+  const photo = property.photos[0] ? `\nFoto: ${property.photos[0]}` : "";
+  const message = `Hola, quiero consultar por ${property.title} en Venta\nPublicacion: ${url}${photo}`;
 
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
@@ -793,13 +801,16 @@ export default function PropertyApp() {
   const [isMapReady, setIsMapReady] = useState(false);
   const [isPickingLocation, setIsPickingLocation] = useState(false);
   const [search, setSearch] = useState("");
-  const [listingView, setListingView] = useState<ListingView>("all");
+  const [mapSearchQuery, setMapSearchQuery] = useState("");
   const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [currencyFilter, setCurrencyFilter] = useState<CurrencyFilter>("all");
   const [sortOption, setSortOption] = useState<SortOption>("recent");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+  const [listingView, setListingView] = useState<ListingView>("all");
+  const [resultsView, setResultsView] = useState<ResultsView>("map");
+  const [hasLoadedUrlState, setHasLoadedUrlState] = useState(false);
   const isSellerSession = Boolean(user);
   const userId = user?.id;
   const isAdminSession = adminEmails.includes(modelEmail(user));
@@ -808,12 +819,45 @@ export default function PropertyApp() {
     isPickingLocationRef.current = isPickingLocation;
   }, [isPickingLocation]);
 
+  useEffect(() => {
+    queueMicrotask(() => {
+      const params = new URLSearchParams(window.location.search);
+      setSearch(params.get("zona") ?? "");
+      const propertyType = params.get("tipo") ?? "all";
+      const propertyStatus = params.get("estado") ?? "all";
+      const currency = params.get("moneda") ?? "all";
+      const sort = params.get("orden") ?? "recent";
+      setPropertyTypeFilter(propertyTypeOptions.includes(propertyType) ? propertyType : "all");
+      setStatusFilter(["all", "published", "sold", "draft"].includes(propertyStatus) ? propertyStatus as StatusFilter : "all");
+      setCurrencyFilter(["all", "ARS", "USD"].includes(currency) ? currency as CurrencyFilter : "all");
+      setSortOption(["recent", "price-asc", "price-desc"].includes(sort) ? sort as SortOption : "recent");
+      setMinPrice(/^\d+(\.\d+)?$/.test(params.get("min") ?? "") ? params.get("min") ?? "" : "");
+      setMaxPrice(/^\d+(\.\d+)?$/.test(params.get("max") ?? "") ? params.get("max") ?? "" : "");
+      setResultsView(params.get("vista") === "lista" ? "list" : "map");
+      setHasLoadedUrlState(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedUrlState) return;
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("zona", search.trim());
+    if (propertyTypeFilter !== "all") params.set("tipo", propertyTypeFilter);
+    if (statusFilter !== "all") params.set("estado", statusFilter);
+    if (currencyFilter !== "all") params.set("moneda", currencyFilter);
+    if (sortOption !== "recent") params.set("orden", sortOption);
+    if (minPrice) params.set("min", minPrice);
+    if (maxPrice) params.set("max", maxPrice);
+    if (resultsView !== "map") params.set("vista", "lista");
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `/?${query}` : "/");
+  }, [currencyFilter, hasLoadedUrlState, maxPrice, minPrice, propertyTypeFilter, resultsView, search, sortOption, statusFilter]);
+
   const visibleProperties = useMemo(() => {
     const query = search.trim().toLowerCase();
     const min = minPrice ? Number(minPrice) : null;
     const max = maxPrice ? Number(maxPrice) : null;
     const viewItems = properties.filter((property) => {
-      if (listingView === "demo") return isDemoProperty(property);
       if (listingView === "mine") {
         return Boolean(userId) && property.author === userId;
       }
@@ -822,46 +866,15 @@ export default function PropertyApp() {
     });
 
     const filteredItems = viewItems.filter((property) => {
-      if (
-        propertyTypeFilter !== "all" &&
-        property.propertyType !== propertyTypeFilter
-      ) {
-        return false;
-      }
-
-      if (statusFilter !== "all" && property.status !== statusFilter) {
-        return false;
-      }
-
-      if (currencyFilter !== "all" && property.currency !== currencyFilter) {
-        return false;
-      }
-
-      if (min !== null && Number.isFinite(min) && property.price < min) {
-        return false;
-      }
-
-      if (max !== null && Number.isFinite(max) && property.price > max) {
-        return false;
-      }
-
+      if (propertyTypeFilter !== "all" && property.propertyType !== propertyTypeFilter) return false;
+      if (statusFilter !== "all" && property.status !== statusFilter) return false;
+      if (currencyFilter !== "all" && property.currency !== currencyFilter) return false;
+      if (min !== null && Number.isFinite(min) && property.price < min) return false;
+      if (max !== null && Number.isFinite(max) && property.price > max) return false;
       return true;
     });
-
     const searchedItems = query
-      ? filteredItems.filter((property) =>
-          [
-            property.title,
-            property.description,
-            property.propertyType,
-            property.contactPhone,
-            property.locationLabel,
-            formatPrice(property),
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(query),
-        )
+      ? filteredItems.filter((property) => property.locationLabel.toLowerCase().includes(query))
       : filteredItems;
 
     return [...searchedItems].sort((first, second) => {
@@ -872,59 +885,24 @@ export default function PropertyApp() {
       if (sortOption === "price-desc") return second.price - first.price;
       return 0;
     });
-  }, [
-    currencyFilter,
-    listingView,
-    maxPrice,
-    minPrice,
-    properties,
-    propertyTypeFilter,
-    search,
-    sortOption,
-    statusFilter,
-    userId,
-  ]);
+  }, [currencyFilter, listingView, maxPrice, minPrice, properties, propertyTypeFilter, search, sortOption, statusFilter, userId]);
 
   const activeFilters = useMemo(() => {
     const filters: { key: string; label: string }[] = [];
-
-    if (search.trim()) filters.push({ key: "search", label: search.trim() });
-    if (propertyTypeFilter !== "all") {
-      filters.push({ key: "type", label: propertyTypeFilter });
-    }
-    if (statusFilter !== "all") {
-      filters.push({
-        key: "status",
-        label:
-          statusFilter === "published"
-            ? "Disponibles"
-            : statusFilter === "sold"
-              ? "Vendidas"
-              : "Borradores",
-      });
-    }
-    if (currencyFilter !== "all") {
-      filters.push({ key: "currency", label: currencyFilter });
-    }
+    if (propertyTypeFilter !== "all") filters.push({ key: "type", label: propertyTypeFilter });
+    if (statusFilter !== "all") filters.push({ key: "status", label: statusFilter === "published" ? "Disponibles" : statusFilter === "sold" ? "Vendidas" : "Borradores" });
+    if (currencyFilter !== "all") filters.push({ key: "currency", label: currencyFilter });
     if (minPrice) filters.push({ key: "min", label: `Desde ${minPrice}` });
     if (maxPrice) filters.push({ key: "max", label: `Hasta ${maxPrice}` });
-    if (sortOption === "price-asc") {
-      filters.push({ key: "sort", label: "Menor precio" });
-    }
-    if (sortOption === "price-desc") {
-      filters.push({ key: "sort", label: "Mayor precio" });
-    }
-
+    if (sortOption === "price-asc") filters.push({ key: "sort", label: "Menor precio" });
+    if (sortOption === "price-desc") filters.push({ key: "sort", label: "Mayor precio" });
     return filters;
-  }, [
-    currencyFilter,
-    maxPrice,
-    minPrice,
-    propertyTypeFilter,
-    search,
-    sortOption,
-    statusFilter,
-  ]);
+  }, [currencyFilter, maxPrice, minPrice, propertyTypeFilter, sortOption, statusFilter]);
+
+  const zoneSuggestions = useMemo(
+    () => [...new Set(properties.map((property) => property.locationLabel.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es")),
+    [properties],
+  );
 
   const ownPropertiesCount = useMemo(
     () =>
@@ -954,10 +932,48 @@ export default function PropertyApp() {
     [ownProperties],
   );
 
-  const demoPropertiesCount = useMemo(
-    () => properties.filter(isDemoProperty).length,
-    [properties],
-  );
+  function searchMap(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = search.trim().toLowerCase();
+    setMapSearchQuery(search.trim());
+
+    if (!query) return;
+    if (!mapRef.current || !window.google) {
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${search.trim()}, Catamarca, Argentina`)}`, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const matchingProperties = visibleProperties.filter((property) =>
+      property.locationLabel.toLowerCase().includes(query),
+    );
+    if (matchingProperties.length === 0) {
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${search.trim()}, Catamarca, Argentina`)}`, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const bounds = new window.google.maps.LatLngBounds();
+    matchingProperties.forEach((property) => {
+      bounds.extend({ lat: property.latitude, lng: property.longitude });
+    });
+    if (matchingProperties.length === 1) {
+      const center = bounds.getCenter();
+      mapRef.current.setCenter({ lat: center.lat(), lng: center.lng() });
+      mapRef.current.setZoom(14);
+    } else {
+      mapRef.current.fitBounds(bounds, 48);
+    }
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setPropertyTypeFilter("all");
+    setStatusFilter("all");
+    setCurrencyFilter("all");
+    setSortOption("recent");
+    setMinPrice("");
+    setMaxPrice("");
+    setMapSearchQuery("");
+  }
 
   const adminProperties = useMemo(
     () => properties.filter((property) => !isDemoProperty(property)),
@@ -977,12 +993,12 @@ export default function PropertyApp() {
         sort: "-created",
       });
       const items = records.map(propertyFromRecord);
-      setProperties(mergeWithDemoProperties(items));
+      setProperties(items);
       setStatus("");
     } catch {
-      setProperties(demoProperties);
+      setProperties([]);
       setStatus(
-        "Mostrando propiedades de ejemplo. Conecta PocketBase para ver publicaciones reales.",
+        "No se pudieron cargar las publicaciones reales. Revisa PocketBase o intenta de nuevo.",
       );
     } finally {
       setIsLoading(false);
@@ -1161,16 +1177,6 @@ export default function PropertyApp() {
     setForm(emptyForm);
     setIsEditorOpen(true);
     setStatus("Completa los datos de la nueva propiedad.");
-  }
-
-  function clearFilters() {
-    setSearch("");
-    setPropertyTypeFilter("all");
-    setStatusFilter("all");
-    setCurrencyFilter("all");
-    setSortOption("recent");
-    setMinPrice("");
-    setMaxPrice("");
   }
 
   function startMapLocationPick() {
@@ -1478,6 +1484,28 @@ export default function PropertyApp() {
     }
   }
 
+  async function shareSearch() {
+    const url = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Búsqueda de propiedades", url });
+      } else {
+        await copyTextToClipboard(url);
+        setStatus("Enlace de búsqueda copiado.");
+      }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setStatus("No se pudo compartir la búsqueda.");
+      }
+    }
+  }
+
+  function reportUrl(property: PropertyListing) {
+    const subject = `Reporte de publicación: ${property.title}`;
+    const body = `Quiero reportar esta publicación.\n\n${propertyPublicUrl(property)}\n\nMotivo:`;
+    return `mailto:${adminEmails[0]}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
   return (
     <main className="min-h-screen bg-[#f7f5f0] text-[#171717]">
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-10 px-5 py-8 sm:px-8 lg:px-10">
@@ -1521,7 +1549,7 @@ export default function PropertyApp() {
                   {modelName(user)}
                 </span>
                 <button
-                  className="rounded-full bg-[#6e7d5b] px-5 py-2 text-sm font-medium text-white"
+                  className="rounded-md bg-[#6e7d5b] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#536442]"
                   onClick={startNewProperty}
                   type="button"
                 >
@@ -1536,13 +1564,22 @@ export default function PropertyApp() {
                 </button>
               </>
             ) : (
-              <button
-                className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white"
-                onClick={loginWithGoogle}
-                type="button"
-              >
-                Login con Google
-              </button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <button
+                  className="w-full rounded-md bg-[#6e7d5b] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#536442] sm:w-auto"
+                  onClick={loginWithGoogle}
+                  type="button"
+                >
+                  Publicar propiedad
+                </button>
+                <button
+                  className="w-full rounded-md border border-black/15 bg-white px-5 py-3 text-sm font-semibold transition hover:bg-black/5 sm:w-auto"
+                  onClick={loginWithGoogle}
+                  type="button"
+                >
+                  Ingresar
+                </button>
+              </div>
             )}
           </div>
         </header>
@@ -1564,143 +1601,88 @@ export default function PropertyApp() {
                 La Carrera o la zona exacta, y toca una foto para abrir la ficha.
               </p>
             </div>
-            <div className="grid gap-4 rounded-md border border-black/10 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold">
-                    {isLoading
-                      ? "Buscando propiedades..."
-                      : `${visibleProperties.length} resultado${
-                          visibleProperties.length === 1 ? "" : "s"
-                        }`}
-                  </p>
-                  <p className="text-sm text-black/50">
-                    Combina zona, tipo, precio y moneda para encontrar mas rapido.
-                  </p>
+            <div className="grid gap-3 rounded-md border border-black/10 bg-white p-4 shadow-sm">
+              <p className="text-sm font-semibold">
+                {isLoading
+                  ? "Buscando propiedades..."
+                  : `${visibleProperties.length} resultado${
+                      visibleProperties.length === 1 ? "" : "s"
+                    }`}
+              </p>
+              <form
+                className="grid gap-1 text-sm font-medium"
+                onSubmit={searchMap}
+              >
+                Zona
+                <div className="flex gap-2">
+                  <input
+                    className="min-w-0 flex-1 rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
+                    list="property-zone-suggestions"
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Ej: Valle Viejo"
+                    value={search}
+                  />
+                  <datalist id="property-zone-suggestions">
+                    {zoneSuggestions.map((zone) => <option key={zone} value={zone} />)}
+                  </datalist>
+                  <button
+                    className="rounded-md bg-[#6e7d5b] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5f6f4d]"
+                    type="submit"
+                  >
+                    Buscar
+                  </button>
                 </div>
-                <button
-                  className="w-full rounded-md border border-black/10 px-4 py-2 text-sm font-medium text-black/70 transition hover:bg-black/5 sm:w-auto"
-                  onClick={clearFilters}
-                  type="button"
-                >
-                  Limpiar filtros
-                </button>
-              </div>
-
-              {activeFilters.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {activeFilters.map((filter) => (
-                    <span
-                      className="rounded-full bg-[#edf2e7] px-3 py-1 text-xs font-semibold text-[#4d5e39]"
-                      key={filter.key}
-                    >
-                      {filter.label}
-                    </span>
+              </form>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-black/10 pt-3">
+                <div aria-label="Modo de resultados" className="inline-flex rounded-md border border-black/10 p-1" role="group">
+                  {([ ["map", "Mapa"], ["list", "Lista"] ] as const).map(([view, label]) => (
+                    <button className={`rounded px-3 py-1.5 text-sm font-medium ${resultsView === view ? "bg-black text-white" : "text-black/60 hover:bg-black/5"}`} key={view} onClick={() => setResultsView(view)} type="button">{label}</button>
                   ))}
                 </div>
-              ) : null}
-
-              <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr_1fr_0.8fr_1fr]">
-              <label className="grid gap-1 text-sm font-medium">
-                Buscar
-                <input
-                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Zona, titulo, tipo o telefono"
-                  value={search}
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Tipo
-                <select
-                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
-                  onChange={(event) => setPropertyTypeFilter(event.target.value)}
-                  value={propertyTypeFilter}
-                >
-                  <option value="all">Todos</option>
-                  {propertyTypeOptions.map((propertyType) => (
-                    <option key={propertyType} value={propertyType}>
-                      {propertyType}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Estado
-                <select
-                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value as StatusFilter)
-                  }
-                  value={statusFilter}
-                >
-                  <option value="all">Todos</option>
-                  <option value="published">Disponibles</option>
-                  <option value="sold">Vendidas</option>
-                  {isSellerSession ? <option value="draft">Borradores</option> : null}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Moneda
-                <select
-                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
-                  onChange={(event) =>
-                    setCurrencyFilter(event.target.value as CurrencyFilter)
-                  }
-                  value={currencyFilter}
-                >
-                  <option value="all">Todas</option>
-                  <option value="USD">USD</option>
-                  <option value="ARS">ARS</option>
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Orden
-                <select
-                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
-                  onChange={(event) =>
-                    setSortOption(event.target.value as SortOption)
-                  }
-                  value={sortOption}
-                >
-                  <option value="recent">Mas recientes</option>
-                  <option value="price-asc">Menor precio</option>
-                  <option value="price-desc">Mayor precio</option>
-                </select>
-              </label>
+                <button className="rounded-md border border-black/10 px-3 py-2 text-sm font-semibold" onClick={shareSearch} type="button">Compartir búsqueda</button>
               </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
-              <label className="grid gap-1 text-sm font-medium">
-                Precio minimo
-                <input
-                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
-                  inputMode="decimal"
-                  min="0"
-                  onChange={(event) => setMinPrice(event.target.value)}
-                  placeholder="Ej: 50000"
-                  type="number"
-                  value={minPrice}
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Precio maximo
-                <input
-                  className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal outline-none focus:border-black"
-                  inputMode="decimal"
-                  min="0"
-                  onChange={(event) => setMaxPrice(event.target.value)}
-                  placeholder="Ej: 150000"
-                  type="number"
-                  value={maxPrice}
-                />
-              </label>
-              </div>
+              <details className="group border-t border-black/10 pt-3">
+                <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold">
+                  <span>Más filtros{activeFilters.length ? ` (${activeFilters.length})` : ""}</span>
+                  <span className="text-lg leading-none text-black/50 group-open:rotate-45">+</span>
+                </summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <label className="grid gap-1 text-sm font-medium">Tipo
+                    <select className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal" onChange={(event) => setPropertyTypeFilter(event.target.value)} value={propertyTypeFilter}>
+                      <option value="all">Todos</option>
+                      {propertyTypeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium">Estado
+                    <select className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal" onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} value={statusFilter}>
+                      <option value="all">Todos</option><option value="published">Disponibles</option><option value="sold">Vendidas</option>
+                      {isSellerSession ? <option value="draft">Borradores</option> : null}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium">Moneda
+                    <select className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal" onChange={(event) => setCurrencyFilter(event.target.value as CurrencyFilter)} value={currencyFilter}>
+                      <option value="all">Todas</option><option value="USD">USD</option><option value="ARS">ARS</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium">Ordenar por
+                    <select className="rounded-md border border-black/15 bg-white px-3 py-2 font-normal" onChange={(event) => setSortOption(event.target.value as SortOption)} value={sortOption}>
+                      <option value="recent">Más recientes</option><option value="price-asc">Menor precio</option><option value="price-desc">Mayor precio</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium">Precio mínimo
+                    <input className="rounded-md border border-black/15 px-3 py-2 font-normal" min="0" onChange={(event) => setMinPrice(event.target.value)} placeholder="Sin mínimo" type="number" value={minPrice} />
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium">Precio máximo
+                    <input className="rounded-md border border-black/15 px-3 py-2 font-normal" min="0" onChange={(event) => setMaxPrice(event.target.value)} placeholder="Sin máximo" type="number" value={maxPrice} />
+                  </label>
+                  <button className="self-end rounded-md border border-black/15 px-3 py-2 text-sm font-semibold sm:col-span-2 lg:col-span-2" onClick={clearFilters} type="button">Limpiar filtros</button>
+                </div>
+              </details>
             </div>
           </div>
 
           <div
-            className={`relative min-h-[560px] overflow-hidden rounded-md border bg-[#d9ded0] shadow-sm ${
+            className={`relative h-[62vh] min-h-[420px] max-h-[760px] overflow-hidden rounded-md border bg-[#d9ded0] shadow-sm sm:h-[68vh] ${resultsView === "list" ? "hidden" : ""} ${
               isPickingLocation
                 ? "cursor-crosshair border-[#6e7d5b] ring-4 ring-[#6e7d5b]/25"
                 : "border-black/10"
@@ -1723,6 +1705,9 @@ export default function PropertyApp() {
               <div className="pointer-events-none absolute left-4 right-4 top-4 z-30 rounded-md bg-white/95 px-4 py-3 text-sm font-semibold text-[#4d5e39] shadow-sm md:left-auto md:w-[340px]">
                 Toca el punto exacto donde esta la propiedad.
               </div>
+            ) : null}
+            {mapSearchQuery && !googleMapsApiKey ? (
+              <a className="absolute right-3 top-3 z-20 rounded-md bg-white px-3 py-2 text-sm font-semibold shadow-md" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${mapSearchQuery}, Catamarca, Argentina`)}`} rel="noreferrer" target="_blank">Abrir zona en Maps</a>
             ) : null}
             {isPickingLocation && !googleMapsApiKey ? (
               <button
@@ -1774,6 +1759,9 @@ export default function PropertyApp() {
                   <h2 className="mt-1 text-2xl font-semibold">
                     {form.id ? "Editar propiedad" : "Publicar en esta ubicacion"}
                   </h2>
+                  <p className="mt-2 max-w-lg text-sm text-black/60">
+                    Vas a mostrar el precio, la zona, las fotos y el contacto que ingreses. Publica solo datos que quieras compartir.
+                  </p>
                 </div>
                 <button
                   className="rounded-full border border-black/10 px-4 py-2 text-sm"
@@ -1908,8 +1896,8 @@ export default function PropertyApp() {
                   Mis publicaciones
                 </h2>
                 <p className="mt-1 text-sm text-black/60">
-                  Administra tus propiedades sin mezclarlas con ejemplos ni
-                  publicaciones de otros vendedores.
+                  Administra tus propiedades sin mezclarlas con publicaciones
+                  de otros vendedores.
                 </p>
               </div>
               <button
@@ -2039,7 +2027,7 @@ export default function PropertyApp() {
           </section>
         ) : null}
 
-        <section className="grid gap-5">
+        <section className={`grid gap-5 ${resultsView === "map" ? "hidden" : ""}`}>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
               <h2 className="text-2xl font-semibold">
@@ -2047,7 +2035,7 @@ export default function PropertyApp() {
               </h2>
                 <p className="text-sm text-black/60">
                   {isSellerSession
-                    ? "Separa tus propiedades reales de los ejemplos cuando quieras revisar tu trabajo."
+                    ? "Revisa tus propiedades reales y cambia de vista cuando quieras administrar tu trabajo."
                     : "Una vista rapida para comparar despues de explorar el mapa."}
                 </p>
               </div>
@@ -2066,10 +2054,6 @@ export default function PropertyApp() {
                           },
                         ]
                       : []),
-                    {
-                      label: `Ejemplos (${demoPropertiesCount})`,
-                      value: "demo" as const,
-                    },
                   ].map((option) => (
                     <button
                       className={`rounded px-3 py-2 font-medium transition ${
@@ -2090,17 +2074,15 @@ export default function PropertyApp() {
                     ? "Cargando..."
                     : listingView === "mine"
                       ? `${visibleProperties.length} propias`
-                      : listingView === "demo"
-                        ? `${visibleProperties.length} ejemplos`
-                        : `${visibleProperties.length} en vista`}
+                      : `${visibleProperties.length} en vista`}
                 </span>
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="-mx-5 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-3 [scrollbar-width:thin] md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-3">
               {visibleProperties.map((property) => (
                 <article
-                  className="overflow-hidden rounded-md border border-black/10 bg-white shadow-sm"
+                  className="w-[min(86vw,360px)] shrink-0 snap-start overflow-hidden rounded-md border border-black/10 bg-white shadow-sm md:w-auto md:shrink"
                   key={property.id}
                 >
                   <Link
@@ -2127,6 +2109,9 @@ export default function PropertyApp() {
                         {property.locationLabel}
                       </p>
                       <div className="flex flex-wrap gap-2">
+                        <span className={`w-fit rounded-full px-2 py-1 text-xs font-semibold ${property.status === "sold" ? "bg-red-50 text-red-700" : property.status === "draft" ? "bg-black/5 text-black/55" : "bg-[#edf2e7] text-[#4d5e39]"}`}>
+                          {statusLabel(property.status)}
+                        </span>
                         {property.featured ? (
                           <span className="w-fit rounded-full bg-[#edf2e7] px-2 py-1 text-xs font-semibold text-[#4d5e39]">
                             Destacada
@@ -2143,21 +2128,29 @@ export default function PropertyApp() {
                           {displayContactPhone(property.contactPhone)}
                         </p>
                       ) : null}
-                      {isDemoProperty(property) ? (
-                        <span className="w-fit rounded-full bg-[#f7f5f0] px-2 py-1 text-xs font-medium text-black/50">
-                          Ejemplo
-                        </span>
-                      ) : null}
                     </div>
                   </Link>
-                  <div className="border-t border-black/10 p-4 pt-3">
+                  <div className="flex gap-2 border-t border-black/10 p-4 pt-3">
+                    {property.contactPhone ? (
+                      <a
+                        className="flex-1 rounded-md bg-[#25d366] px-3 py-2 text-center text-sm font-semibold text-white"
+                        href={whatsappUrl(property)}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        WhatsApp
+                      </a>
+                    ) : null}
                     <button
-                      className="w-full rounded-md border border-black/10 px-3 py-2 text-sm font-semibold transition hover:bg-black hover:text-white"
+                      className="flex-1 rounded-md border border-black/10 px-3 py-2 text-sm font-semibold transition hover:bg-black hover:text-white"
                       onClick={() => shareProperty(property)}
                       type="button"
                     >
                       Compartir
                     </button>
+                    {adminEmails[0] && !isDemoProperty(property) ? (
+                      <a className="rounded-md border border-black/10 px-3 py-2 text-sm font-semibold" href={reportUrl(property)} aria-label={`Reportar ${property.title}`} title="Reportar publicación">Reportar</a>
+                    ) : null}
                   </div>
                 </article>
               ))}
@@ -2186,7 +2179,7 @@ export default function PropertyApp() {
                   </p>
                 ) : null}
               </div>
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
                 {selected.contactPhone ? (
                   <>
                     <a

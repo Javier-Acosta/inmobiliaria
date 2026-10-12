@@ -4,9 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { adminEmails } from "@/lib/config";
 import { getPocketBase } from "@/lib/pocketbase";
 import {
-  demoProperties,
   formatPrice,
   propertyFromRecord,
   type PropertyListing,
@@ -46,15 +46,29 @@ function phoneHref(phone: string) {
   return digits ? `+${digits}` : "";
 }
 
+function propertyPublicUrl(property: PropertyListing) {
+  if (typeof window === "undefined") return `/propiedades/${property.id}`;
+
+  return `${window.location.origin}/propiedades/${property.id}`;
+}
+
 function whatsappUrl(property: PropertyListing) {
   const digits = whatsappDigits(property.contactPhone);
-  const message = `Hola, quiero consultar por ${property.title}`;
+  const url = propertyPublicUrl(property);
+  const photo = property.photos[0] ? `\nFoto: ${property.photos[0]}` : "";
+  const message = `Hola, quiero consultar por ${property.title} en Venta\nPublicacion: ${url}${photo}`;
 
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
 function googleMapsUrl(property: PropertyListing) {
   return `https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`;
+}
+
+function reportUrl(property: PropertyListing) {
+  const subject = `Reporte de publicación: ${property.title}`;
+  const body = `Quiero reportar esta publicación.\n\n${propertyPublicUrl(property)}\n\nMotivo:`;
+  return `mailto:${adminEmails[0]}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 async function copyTextToClipboard(text: string) {
@@ -95,15 +109,6 @@ export default function PropertyDetailPage({ id }: { id: string }) {
     let cancelled = false;
 
     async function loadProperty() {
-      const demo = demoProperties.find((item) => item.id === id);
-
-      if (demo) {
-        setProperty(demo);
-        setSelectedPhoto(0);
-        setStatus("");
-        return;
-      }
-
       try {
         const record = await pb.collection("properties").getOne(id);
         if (cancelled) return;
@@ -324,6 +329,14 @@ export default function PropertyDetailPage({ id }: { id: string }) {
                   >
                     Compartir publicacion
                   </button>
+                  {adminEmails[0] && property.author !== "demo" ? (
+                    <a
+                      className="mt-2 block w-full rounded-md border border-black/10 px-4 py-3 text-center text-sm font-semibold"
+                      href={reportUrl(property)}
+                    >
+                      Reportar publicación
+                    </a>
+                  ) : null}
                   {shareStatus ? (
                     <p className="mt-3 text-center text-sm text-black/60">
                       {shareStatus}
