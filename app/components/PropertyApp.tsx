@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthModel } from "pocketbase";
 
+import FavoriteButton from "@/app/components/FavoriteButton";
+import { useFavorites } from "@/lib/use-favorites";
+
 import {
   adminEmails,
   defaultCurrency,
@@ -32,9 +35,10 @@ type FormState = {
   latitude: string;
   longitude: string;
   photos: File[];
+  existingPhotos: string[];
 };
 
-type ListingView = "all" | "mine";
+type ListingView = "all" | "mine" | "favorites";
 type StatusFilter = "all" | PropertyListing["status"];
 type CurrencyFilter = "all" | "ARS" | "USD";
 type SortOption = "recent" | "price-asc" | "price-desc";
@@ -51,8 +55,10 @@ const emptyForm: FormState = {
   latitude: "",
   longitude: "",
   photos: [],
+  existingPhotos: [],
 };
 
+const maxPropertyPhotos = 8;
 const maxPhotoDimension = 1600;
 const maxCompressedPhotoBytes = 1_600_000;
 const imageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -515,6 +521,11 @@ function PropertyForm({
     });
   }
 
+  const remainingPhotoSlots = Math.max(
+    0,
+    maxPropertyPhotos - form.existingPhotos.length - form.photos.length,
+  );
+
   return (
     <form className="grid gap-4" onSubmit={submitProperty}>
       {status ? (
@@ -679,20 +690,79 @@ function PropertyForm({
         <input
           accept="image/*"
           className="rounded-md border border-dashed border-black/20 px-3 py-3 font-normal"
-          disabled={isSaving}
+          disabled={isSaving || remainingPhotoSlots === 0}
           multiple
-          onChange={(event) =>
-            setForm((current) => ({
-              ...current,
-              photos: Array.from(event.target.files ?? []),
-            }))
-          }
+          onChange={(event) => {
+            const selectedPhotos = Array.from(event.target.files ?? []);
+
+            setForm((current) => {
+              const availableSlots = Math.max(
+                0,
+                maxPropertyPhotos -
+                  current.existingPhotos.length -
+                  current.photos.length,
+              );
+
+              if (availableSlots === 0) return current;
+
+              return {
+                ...current,
+                photos: [
+                  ...current.photos,
+                  ...selectedPhotos.slice(0, availableSlots),
+                ],
+              };
+            });
+            event.target.value = "";
+          }}
           type="file"
         />
         <span className="text-xs font-normal leading-5 text-black/50">
-          Acepta JPG/JPEG, PNG o WEBP. Las fotos se optimizan antes de publicar.
+          Acepta JPG/JPEG, PNG o WEBP. Podes subir hasta {maxPropertyPhotos} fotos por publicacion.
         </span>
       </label>
+
+      {form.existingPhotos.length > 0 ? (
+        <div className="grid gap-3 rounded-md border border-black/10 bg-[#f7f5f0] p-3">
+          <p className="text-sm font-semibold">
+            {form.existingPhotos.length} foto
+            {form.existingPhotos.length === 1 ? "" : "s"} publicada
+            {form.existingPhotos.length === 1 ? "" : "s"}
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {form.existingPhotos.map((photo, index) => (
+              <div
+                className="relative aspect-[4/3] overflow-hidden rounded-md border border-black/10 bg-white"
+                key={photo}
+              >
+                <Image
+                  alt={`Foto publicada ${index + 1}`}
+                  className="object-cover"
+                  fill
+                  sizes="140px"
+                  src={photo}
+                  unoptimized={photo.startsWith("http")}
+                />
+                {index === 0 ? (
+                  <span className="absolute left-2 top-2 rounded-full bg-black px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-white">
+                    Portada
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          {remainingPhotoSlots > 0 ? (
+            <p className="text-xs leading-5 text-black/50">
+              Podes agregar {remainingPhotoSlots} foto
+              {remainingPhotoSlots === 1 ? "" : "s"} mas sin borrar las actuales.
+            </p>
+          ) : (
+            <p className="text-xs leading-5 text-black/50">
+              Esta publicacion ya tiene el maximo de fotos permitido.
+            </p>
+          )}
+        </div>
+      ) : null}
 
       {photoPreviews.length > 0 ? (
         <div className="grid gap-3 rounded-md border border-black/10 bg-[#f7f5f0] p-3">
@@ -785,6 +855,7 @@ function PropertyForm({
 }
 
 export default function PropertyApp() {
+  const { favoriteIds, toggleFavorite, favoriteError } = useFavorites();
   const pb = useMemo(() => getPocketBase(), []);
   const router = useRouter();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -809,7 +880,7 @@ export default function PropertyApp() {
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [listingView, setListingView] = useState<ListingView>("all");
-  const [resultsView, setResultsView] = useState<ResultsView>("map");
+  const [resultsView, setResultsView] = useState<ResultsView>("list");
   const [hasLoadedUrlState, setHasLoadedUrlState] = useState(false);
   const isSellerSession = Boolean(user);
   const userId = user?.id;
@@ -833,7 +904,7 @@ export default function PropertyApp() {
       setSortOption(["recent", "price-asc", "price-desc"].includes(sort) ? sort as SortOption : "recent");
       setMinPrice(/^\d+(\.\d+)?$/.test(params.get("min") ?? "") ? params.get("min") ?? "" : "");
       setMaxPrice(/^\d+(\.\d+)?$/.test(params.get("max") ?? "") ? params.get("max") ?? "" : "");
-      setResultsView(params.get("vista") === "lista" ? "list" : "map");
+      setResultsView(params.get("vista") === "mapa" ? "map" : "list");
       setHasLoadedUrlState(true);
     });
   }, []);
@@ -848,7 +919,7 @@ export default function PropertyApp() {
     if (sortOption !== "recent") params.set("orden", sortOption);
     if (minPrice) params.set("min", minPrice);
     if (maxPrice) params.set("max", maxPrice);
-    if (resultsView !== "map") params.set("vista", "lista");
+    if (resultsView === "map") params.set("vista", "mapa");
     const query = params.toString();
     window.history.replaceState(null, "", query ? `/?${query}` : "/");
   }, [currencyFilter, hasLoadedUrlState, maxPrice, minPrice, propertyTypeFilter, resultsView, search, sortOption, statusFilter]);
@@ -858,6 +929,7 @@ export default function PropertyApp() {
     const min = minPrice ? Number(minPrice) : null;
     const max = maxPrice ? Number(maxPrice) : null;
     const viewItems = properties.filter((property) => {
+      if (listingView === "favorites") return favoriteIds.includes(property.id);
       if (listingView === "mine") {
         return Boolean(userId) && property.author === userId;
       }
@@ -885,7 +957,9 @@ export default function PropertyApp() {
       if (sortOption === "price-desc") return second.price - first.price;
       return 0;
     });
-  }, [currencyFilter, listingView, maxPrice, minPrice, properties, propertyTypeFilter, search, sortOption, statusFilter, userId]);
+  }, [currencyFilter, favoriteIds, listingView, maxPrice, minPrice, properties, propertyTypeFilter, search, sortOption, statusFilter, userId]);
+
+  const favoritePropertiesCount = properties.filter((property) => favoriteIds.includes(property.id)).length;
 
   const activeFilters = useMemo(() => {
     const filters: { key: string; label: string }[] = [];
@@ -1235,6 +1309,7 @@ export default function PropertyApp() {
       latitude: String(property.latitude),
       longitude: String(property.longitude),
       photos: [],
+      existingPhotos: property.photos,
       status: property.status,
     });
     setIsEditorOpen(true);
@@ -1310,7 +1385,7 @@ export default function PropertyApp() {
       payload.set("author", user.id);
 
       optimizedPhotos.forEach((file) => {
-        payload.append("photos", file);
+        payload.append(form.id ? "photos+" : "photos", file);
       });
 
       if (form.id) {
@@ -1640,7 +1715,19 @@ export default function PropertyApp() {
                   ))}
                 </div>
                 <button className="rounded-md border border-black/10 px-3 py-2 text-sm font-semibold" onClick={shareSearch} type="button">Compartir búsqueda</button>
+                <button
+                  aria-pressed={listingView === "favorites"}
+                  className={`rounded-md border border-black/10 px-3 py-2 text-sm font-semibold ${listingView === "favorites" ? "bg-red-50 text-red-700" : "bg-white"}`}
+                  onClick={() => {
+                    setListingView(listingView === "favorites" ? "all" : "favorites");
+                    setResultsView("list");
+                  }}
+                  type="button"
+                >
+                  Mis favoritos ({favoritePropertiesCount})
+                </button>
               </div>
+              {favoriteError ? <p className="text-sm text-red-700" role="alert">{favoriteError}</p> : null}
               <details className="group border-t border-black/10 pt-3">
                 <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold">
                   <span>Más filtros{activeFilters.length ? ` (${activeFilters.length})` : ""}</span>
@@ -2031,7 +2118,7 @@ export default function PropertyApp() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
               <h2 className="text-2xl font-semibold">
-                Publicaciones
+                {listingView === "favorites" ? "Mis favoritos" : "Publicaciones"}
               </h2>
                 <p className="text-sm text-black/60">
                   {isSellerSession
@@ -2040,11 +2127,15 @@ export default function PropertyApp() {
                 </p>
               </div>
               <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-                <div className="inline-flex rounded-md border border-black/10 bg-white p-1 text-sm shadow-sm">
+                <div className="inline-flex flex-wrap rounded-md border border-black/10 bg-white p-1 text-sm shadow-sm">
                   {[
                     {
                       label: `Todas (${properties.length})`,
                       value: "all" as const,
+                    },
+                    {
+                      label: `Mis favoritos (${favoritePropertiesCount})`,
+                      value: "favorites" as const,
                     },
                     ...(isSellerSession
                       ? [
@@ -2079,12 +2170,30 @@ export default function PropertyApp() {
               </div>
             </div>
 
+            {!isLoading && visibleProperties.length === 0 ? (
+              <div className="border-y border-black/10 py-6">
+                <p className="text-sm text-black/60">
+                  {listingView === "favorites"
+                    ? favoritePropertiesCount === 0 ? "No hay favoritos disponibles en este dispositivo." : "No hay favoritos que coincidan con esta busqueda."
+                    : "No hay publicaciones que coincidan con esta busqueda."}
+                </p>
+                <button className="mt-3 rounded-md border border-black/15 bg-white px-3 py-2 text-sm font-semibold" onClick={() => {
+                  clearFilters();
+                  if (listingView === "favorites" && favoritePropertiesCount === 0) setListingView("all");
+                }} type="button">{listingView === "favorites" && favoritePropertiesCount === 0 ? "Ver todas" : "Limpiar filtros"}</button>
+              </div>
+            ) : null}
             <div className="-mx-5 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-3 [scrollbar-width:thin] md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-3">
               {visibleProperties.map((property) => (
                 <article
-                  className="w-[min(86vw,360px)] shrink-0 snap-start overflow-hidden rounded-md border border-black/10 bg-white shadow-sm md:w-auto md:shrink"
+                  className="relative w-[min(86vw,360px)] shrink-0 snap-start overflow-hidden rounded-md border border-black/10 bg-white shadow-sm md:w-auto md:shrink"
                   key={property.id}
                 >
+                  <FavoriteButton
+                    className="absolute right-2 top-2 z-10"
+                    isFavorite={favoriteIds.includes(property.id)}
+                    onToggle={() => toggleFavorite(property.id)}
+                  />
                   <Link
                     className="block w-full text-left"
                     href={`/propiedades/${property.id}`}

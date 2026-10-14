@@ -4,6 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import FavoriteButton from "@/app/components/FavoriteButton";
+import { useFavorites } from "@/lib/use-favorites";
+
 import { adminEmails } from "@/lib/config";
 import { getPocketBase } from "@/lib/pocketbase";
 import {
@@ -99,6 +102,7 @@ function SoldRibbon() {
 }
 
 export default function PropertyDetailPage({ id }: { id: string }) {
+  const { favoriteIds, toggleFavorite, favoriteError } = useFavorites();
   const pb = useMemo(() => getPocketBase(), []);
   const [property, setProperty] = useState<PropertyListing | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState(0);
@@ -258,6 +262,11 @@ export default function PropertyDetailPage({ id }: { id: string }) {
 
               <aside className="grid content-start gap-4 lg:sticky lg:top-6">
                 <div className="rounded-md border border-black/10 bg-white p-5 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-black/60">Favoritos</span>
+                    <FavoriteButton isFavorite={favoriteIds.includes(property.id)} onToggle={() => toggleFavorite(property.id)} />
+                  </div>
+                  {favoriteError ? <p className="mb-3 text-sm text-red-700" role="alert">{favoriteError}</p> : null}
                   <div className="flex flex-wrap gap-2">
                     <span className="rounded-full bg-[#edf2e7] px-3 py-1 text-xs font-semibold text-[#4d5e39]">
                       {property.propertyType}
